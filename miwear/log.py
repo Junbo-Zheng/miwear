@@ -25,9 +25,13 @@ import glob
 import re
 import logging as log
 
-
 import argparse
 from enum import IntEnum
+
+try:
+    from miwear import __version__
+except ImportError:
+    __version__ = "0.0.1"
 
 
 log.basicConfig(
@@ -40,9 +44,10 @@ log.basicConfig(
 class DefaultCLIParameters:
     password = "123456"
     remote_path = "/sdcard/Android/data/com.mi.health/files/log/devicelog"
-    source_path = "~/Downloads"
+    source_path = "."
     output_path = "./file"
     output_file = "file.tar.gz"
+    file_name = "log.tar.gz"
     filter_pattern = "log\\d*|tmp.log"
     tmp_log = "tmp.log"
     special_file_prefix = ["core-", "minidump", "crash"]
@@ -64,13 +69,20 @@ class ShellRunner:
 
 class CLIParametersParser:
     def __init__(self):
-        log.debug("Parameter Number :%d", len(sys.argv))
-        log.debug("Shell Name       :%s", str(sys.argv[0]))
+        # log.debug("Parameter Number :%d", len(sys.argv))
+        # log.debug("Shell Name       :%s", str(sys.argv[0]))
 
         arg_parser = argparse.ArgumentParser(
             description="Extract a file with the suffix `.tar.gz` from the source path or remote path and extract to "
             "output_path."
         )
+
+        arg_parser.add_argument(
+            "--version",
+            action="store_true",
+            help="Show miwear_log version and exit.",
+        )
+
         arg_parser.add_argument(
             "-o",
             "--output_path",
@@ -94,7 +106,6 @@ class CLIParametersParser:
             nargs="+",
             default=DefaultCLIParameters.source_path,
             help="extract packet from source path",
-            required=True,
         )
         arg_parser.add_argument(
             "-m",
@@ -108,8 +119,8 @@ class CLIParametersParser:
             "--filename",
             type=str,
             nargs=1,
+            default=DefaultCLIParameters.file_name,
             help="extract packet filename, the default file suffix is .tar.gz, such as: log.tar.gz",
-            required=True,
         )
         arg_parser.add_argument(
             "-p",
@@ -127,8 +138,10 @@ class CLIParametersParser:
         )
 
         self.__cli_args = arg_parser.parse_args()
+        if self.__cli_args.version:
+            print("miwear_log version %s" % __version__)
+            sys.exit(0)
 
-        # extract the filename without suffix
         pattern = r"^(.*?)\.tar.*\.gz$"
         match = re.match(pattern, self.filename[0])
         if match:
@@ -147,8 +160,11 @@ class CLIParametersParser:
     def __getattr__(self, item):
         return self.__cli_args.__getattribute__(item)
 
-    def __set__(self, instance, value):
-        self.__cli_args.__set__(instance, value)
+    def __setattr__(self, name, value):
+        if name == "_CLIParametersParser__cli_args":
+            super().__setattr__(name, value)
+        else:
+            setattr(self.__cli_args, name, value)
 
 
 class LogTools:
@@ -170,12 +186,13 @@ class LogTools:
             if input_str != "Y":
                 log.debug("quit and exit")
                 return -1
-
         cmd = "sudo rm -rf " + self.__cli_parser.output_path
         # fmt: off
         log.debug(
             Highlight.Convert("clear") + " exist file %s by command %s",
-            self.__cli_parser.output_path, cmd)
+            self.__cli_parser.output_path,
+            cmd
+        )
         # fmt: on
         return ShellRunner.command_run(cmd, self.__cli_parser.password)
 
@@ -205,14 +222,21 @@ class LogTools:
             result = glob.glob(pattern)
 
         if len(result) == 0:
+            log.error(
+                Highlight.Convert(
+                    "Not found file packet, please check source path", Highlight.RED
+                ),
+                stack_info=True,
+            )
             return -1
 
         # fmt: off
         log.debug(
             Highlight.Convert("pull") + " %s from %s",
-            result, self.__cli_parser.source_path[0])
+            result,
+            self.__cli_parser.source_path[0]
+        )
         # fmt: on
-
         if len(result) > 1:
             index = input("Please input the file index you want to extract:\n")
             file = result[int(index)]
@@ -229,13 +253,16 @@ class LogTools:
         else:
             log.debug("copy to %s", output)
             shutil.copyfile(file, output)
-
         if output is None:
-            log.debug("not found file packet")
+            log.error(
+                Highlight.Convert("not found file packet", Highlight.RED),
+                stack_info=True,
+            )
             return -1
-        self.log_packet_path = output
-        log.debug("output file %s", self.log_packet_path)
 
+        self.log_packet_path = output
+
+        log.debug("output file %s", self.log_packet_path)
         return 0
 
     def __find_logfiles_path__(self):
@@ -265,16 +292,33 @@ class LogTools:
 
     def __gunzip_all__(self):
         if not os.path.exists(self.log_dir_path):
+            log.error(
+                Highlight.Convert(
+                    f"Not found log directory {self.log_dir_path}", Highlight.RED
+                ),
+                stack_info=True,
+            )
             return -1
 
         dirs = os.listdir(self.log_dir_path)
         for file in dirs:
             if ".gz" in file:
-                filename = file.replace(".gz", "")
-                gzip_file = gzip.GzipFile(self.log_dir_path + "/" + file)
-                with open(os.path.join(self.log_dir_path, filename), "wb+") as f:
-                    f.write(gzip_file.read())
-        log.debug("\n" + Highlight.Convert("gunzip") + " all finish")
+                try:
+                    filename = file.replace(".gz", "")
+                    gzip_file_path = os.path.join(self.log_dir_path, file)
+                    output_file_path = os.path.join(self.log_dir_path, filename)
+
+                    with gzip.open(gzip_file_path, "rb") as gzip_file:
+                        with open(output_file_path, "wb+") as f:
+                            f.write(gzip_file.read())
+
+                except EOFError as e:
+                    log.error(f"file {file} maybe error, code: {e}")
+                    continue
+                except Exception as e:
+                    log.error(f"file {file} error: {e}")
+                    continue
+        log.debug(Highlight.Convert("gunzip") + " all done")
         return 0
 
     def extract_special_files(self):
@@ -302,11 +346,20 @@ class LogTools:
         tar_package = self.log_packet_path.replace(".gz", "")
         cmd = "tar -xvf " + tar_package + " -C " + self.__cli_parser.output_path
         log.debug(Highlight.Convert("tar") + " by command " + cmd)
+
         if ShellRunner.command_run(cmd) != 0:
+            log.error(
+                Highlight.Convert(f"Run command failed: {cmd}", Highlight.RED),
+                stack_info=True,
+            )
             return -1
 
         cmd = "sudo chmod -R 755" + " " + self.__cli_parser.output_path
         if ShellRunner.command_run(cmd, self.__cli_parser.password) != 0:
+            log.error(
+                Highlight.Convert(f"Run command failed: {cmd}", Highlight.RED),
+                stack_info=True,
+            )
             return -1
 
         # tar_package is tmp file, since it's has replaced from .tar.gz to .tar, let's remove it
@@ -363,10 +416,8 @@ class Highlight(IntEnum):
         return "\033[;%dm%s\033[0m" % (color, msg)
 
 
-if __name__ == "__main__":
-    # parse command line args
+def main():
     cli_args = CLIParametersParser()
-
     logtools = LogTools(cli_args)
 
     # clear exist output dir
@@ -384,5 +435,8 @@ if __name__ == "__main__":
     # merge the log files to one file, then remove output dir
     if logtools.merge_logfiles() == 0:
         logtools.clear_output_dir(False)
-
     log.debug(Highlight.Convert("Successful", Highlight.GREEN))
+
+
+if __name__ == "__main__":
+    main()

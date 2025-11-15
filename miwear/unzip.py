@@ -18,24 +18,55 @@
 
 import glob
 import zipfile
+import argparse
+import sys
+import os
+
+try:
+    from miwear import __version__
+except ImportError:
+    __version__ = "0.0.1"
 
 
 def main():
-    # Get all zip files in the current directory
-    zip_files = glob.glob("*.zip")
+    parser = argparse.ArgumentParser(
+        description="Batch extract all ZIP files in the specified directory."
+    )
+    parser.add_argument(
+        "--version", action="store_true", help="Show miwear_uz version and exit."
+    )
+    parser.add_argument(
+        "--path",
+        type=str,
+        default=".",
+        help="Specify the directory path to extract ZIP files (default: current directory)",
+    )
 
-    if not zip_files:
-        print("No zip files found")
+    args = parser.parse_args()
+    if args.version:
+        print(f"miwear_uz version: {__version__}")
+        sys.exit(0)
+
+    # Check if the specified path exists
+    if not os.path.exists(args.path):
+        print(f"Error: The specified path '{args.path}' does not exist.")
         return
 
-    print("Found zip files. Extracting...")
+    # Get all zip files in the specified directory
+    zip_pattern = os.path.join(args.path, "*.zip")
+    zip_files = glob.glob(zip_pattern)
+
+    if not zip_files:
+        print(f"No zip files found in '{args.path}'.")
+        return
+
+    print(f"Found {len(zip_files)} zip files in '{args.path}'. Extracting...")
 
     for zip_file in zip_files:
         print(f"Extracting: {zip_file}")
         try:
-            # Open the zip file in read mode and extract all contents
             with zipfile.ZipFile(zip_file, "r") as zf:
-                zf.extractall()  # Extract to current directory (overwrites existing files)
+                zf.extractall(args.path)
         except zipfile.BadZipFile:
             print(f"  Error: {zip_file} is not a valid ZIP file")
         except PermissionError:
