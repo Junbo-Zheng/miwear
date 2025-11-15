@@ -28,17 +28,20 @@ jobs:
       - name: Run black
         run: black --check --diff .
 
-      - name: Run pyextract.py test
-        run: ./pyextract.py -s . --filename 123
+      - name: Run log.py for test
+        run: ./miwear/log.py -s ./test --filename 123
 
-      - name: Run pyextract_targz.py test
-        run: ./pyextract_targz.py
+      - name: Run targz.py for test
+        run: ./miwear/targz.py --path test
 
-      - name: Run pyextract_gzlog.py test
-        run: ./pyextract_gzlog.py --path log/offlinelog
+      - name: Run gz.py for test
+        run: ./miwear/gz.py --path test
+
+      - name: Run unzip.py for test
+        run: ./miwear/unzip.py --path test
 
       - name: Run check
         run: cat 123.log
 
       - name: Run md5sum
-        run: md5sum -c 123.md5
+        run: md5sum -c test/123.md5

@@ -19,17 +19,48 @@
 import os
 import glob
 import subprocess
+import argparse
+import sys
+
+try:
+    from miwear import __version__
+except ImportError:
+    __version__ = "0.0.1"
 
 
 def main():
-    current_dir = os.getcwd()
-    tar_gz_files = glob.glob(os.path.join(current_dir, "*.tar.gz"))
+    parser = argparse.ArgumentParser(
+        description="Batch extract all ZIP files in the specified directory."
+    )
+    parser.add_argument(
+        "--version", action="store_true", help="Show miwear_tz version and exit."
+    )
+    parser.add_argument(
+        "--path",
+        type=str,
+        default=".",
+        help="Specify the directory path to extract .tar.gz files (default: current directory)",
+    )
 
-    if not tar_gz_files:
-        print("not found any .tar.gz files")
+    args = parser.parse_args()
+    if args.version:
+        print(f"miwear_tz version: {__version__}")
+        sys.exit(0)
+
+    # Check if the specified path exists
+    if not os.path.exists(args.path):
+        print(f"Error: The specified path '{args.path}' does not exist.")
         return
 
-    print(f"found {len(tar_gz_files)} .tar.gz files")
+    # Use the specified path instead of current directory
+    target_dir = os.path.abspath(args.path)
+    tar_gz_files = glob.glob(os.path.join(target_dir, "*.tar.gz"))
+
+    if not tar_gz_files:
+        print(f"not found any .tar.gz files in '{target_dir}'")
+        return
+
+    print(f"found {len(tar_gz_files)} .tar.gz files in '{target_dir}'")
 
     for file_path in tar_gz_files:
         file_name = os.path.basename(file_path)
@@ -38,7 +69,7 @@ def main():
         try:
             result = subprocess.run(
                 ["tar", "-xzvf", file_path],
-                cwd=current_dir,
+                cwd=target_dir,
                 check=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,

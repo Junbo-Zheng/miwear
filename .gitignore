@@ -219,3 +219,9 @@ merged.log
 .idea
 
 *.history
+
+*.gz
+
+*__MACOSX
+
+test/*.txt

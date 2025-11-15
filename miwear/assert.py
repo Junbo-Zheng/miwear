@@ -20,8 +20,13 @@ import argparse
 import os
 import sys
 
+try:
+    from miwear import __version__
+except ImportError:
+    __version__ = "0.0.1"
 
-def main(
+
+def run(
     input_file_path, output_file_path, start_line_number=None, end_line_number=None
 ):
     if not os.path.exists(input_file_path):
@@ -60,10 +65,17 @@ def main(
     print(f"Filtered lines have been written to {output_file_path}")
 
 
-if __name__ == "__main__":
+def main():
     arg_parser = argparse.ArgumentParser(
         description="parse log to extract assert information"
     )
+
+    arg_parser.add_argument(
+        "--version",
+        action="store_true",
+        help="Show miwear_assert version and exit.",
+    )
+
     arg_parser.add_argument(
         "-i", "--input_file", type=str, default="mi.log", help="input file"
     )
@@ -83,4 +95,12 @@ if __name__ == "__main__":
     )
 
     args = arg_parser.parse_args()
-    main(args.input_file, args.output_file, args.start_line, args.end_line)
+    if args.version:
+        print(f"miwear_assert version: {__version__}")
+        sys.exit(0)
+
+    run(args.input_file, args.output_file, args.start_line, args.end_line)
+
+
+if __name__ == "__main__":
+    main()
