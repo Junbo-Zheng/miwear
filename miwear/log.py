@@ -42,7 +42,6 @@ log.basicConfig(
 
 
 class DefaultCLIParameters:
-    password = "123456"
     remote_path = "/sdcard/Android/data/com.mi.health/files/log/devicelog"
     source_path = "."
     output_path = "./file"
@@ -55,15 +54,9 @@ class DefaultCLIParameters:
 
 class ShellRunner:
     @staticmethod
-    def command_run(command, password=None):
-        run_cmd = command.split(" ")
-        if password is not None and "sudo" in run_cmd:
-            run_cmd.insert(0, 'echo "%s"|' % password + "\n")
-            run_cmd.insert(run_cmd.index("sudo") + 1, "-S")
-
-        run_cmd = " ".join(run_cmd)
+    def command_run(command):
         return subprocess.run(
-            run_cmd, stdin=sys.stdin, stdout=sys.stdout, shell=True
+            command, stdin=sys.stdin, stdout=sys.stdout, shell=True
         ).returncode
 
 
@@ -90,14 +83,6 @@ class CLIParametersParser:
             nargs="+",
             default=DefaultCLIParameters.output_path,
             help="extract packet output path",
-        )
-        arg_parser.add_argument(
-            "-P",
-            "--password",
-            type=str,
-            nargs="?",
-            default=DefaultCLIParameters.password,
-            help="extract packet and chmod with user password",
         )
         arg_parser.add_argument(
             "-s",
@@ -186,7 +171,7 @@ class LogTools:
             if input_str != "Y":
                 log.debug("quit and exit")
                 return -1
-        cmd = "sudo rm -rf " + self.__cli_parser.output_path
+        cmd = "rm -rf " + self.__cli_parser.output_path
         # fmt: off
         log.debug(
             Highlight.Convert("clear") + " exist file %s by command %s",
@@ -194,7 +179,7 @@ class LogTools:
             cmd
         )
         # fmt: on
-        return ShellRunner.command_run(cmd, self.__cli_parser.password)
+        return ShellRunner.command_run(cmd)
 
     def pull_packet(self):
         if self.__cli_parser.source_path[0] == "phone":
@@ -354,8 +339,8 @@ class LogTools:
             )
             return -1
 
-        cmd = "sudo chmod -R 755" + " " + self.__cli_parser.output_path
-        if ShellRunner.command_run(cmd, self.__cli_parser.password) != 0:
+        cmd = "chmod -R 755" + " " + self.__cli_parser.output_path
+        if ShellRunner.command_run(cmd) != 0:
             log.error(
                 Highlight.Convert(f"Run command failed: {cmd}", Highlight.RED),
                 stack_info=True,
