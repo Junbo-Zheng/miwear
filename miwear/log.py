@@ -49,7 +49,7 @@ class DefaultCLIParameters:
     file_name = "log.tar.gz"
     filter_pattern = "log\\d*|tmp.log"
     tmp_log = "tmp.log"
-    special_file_prefix = ["core-", "minidump", "crash"]
+    special_file_suffix = [".core"]
 
 
 class ShellRunner:
@@ -269,9 +269,9 @@ class LogTools:
         special_files = []
         for root, dirs, files in os.walk(self.log_dir_path):
             for file in files:
-                # Check if the file starts with any prefix in special_file_prefix
-                for prefix in DefaultCLIParameters.special_file_prefix:
-                    if file.lower().startswith(prefix.lower()):
+                # Check if the file ends with any suffix in special_file_suffix
+                for suffix in DefaultCLIParameters.special_file_suffix:
+                    if file.lower().endswith(suffix.lower()):
                         special_files.append(os.path.join(root, file))
         return special_files
 
