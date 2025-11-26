@@ -121,6 +121,13 @@ class CLIParametersParser:
             default=DefaultCLIParameters.filter_pattern,
             help="filter the files to be merged",
         )
+        arg_parser.add_argument(
+            "-l",
+            "--log",
+            type=str,
+            default=DefaultCLIParameters.tmp_log,
+            help="special log file name(default: tmp.log)",
+        )
 
         self.__cli_args = arg_parser.parse_args()
         if self.__cli_args.version:
@@ -253,7 +260,7 @@ class LogTools:
     def __find_logfiles_path__(self):
         for root, dirs, files in os.walk(self.__cli_parser.output_path):
             for file in files:
-                if file == DefaultCLIParameters.tmp_log:
+                if file == self.__cli_parser.log:
                     self.log_dir_path = os.path.abspath(root)
                     return 0
         return -1
