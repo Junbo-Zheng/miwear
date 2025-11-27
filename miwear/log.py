@@ -49,7 +49,7 @@ class DefaultCLIParameters:
     file_name = "log.tar.gz"
     filter_pattern = "log\\d*|tmp.log"
     tmp_log = "tmp.log"
-    special_file_suffix = [".core"]
+    special_file_suffix = [".core", ".txt"]
 
 
 class ShellRunner:
