@@ -134,10 +134,22 @@ class CLIParametersParser:
             print("miwear_log version %s" % __version__)
             sys.exit(0)
 
-        pattern = r"^(.*?)\.tar.*\.gz$"
-        match = re.match(pattern, self.filename[0])
-        if match:
-            self.filename[0] = match.group(1)
+        input_str = self.filename[0]
+
+        if input_str.isdigit():
+            pass
+        elif re.search(r"\d+", input_str):
+            numbers = re.findall(r"\d+", input_str)
+            if numbers:
+                self.filename[0] = numbers[0]
+                log.debug(
+                    f"Extracted number '{self.filename[0]}' from input '{input_str}'"
+                )
+        else:
+            pattern = r"^(.*?)\.tar.*\.gz$"
+            match = re.match(pattern, input_str)
+            if match:
+                self.filename[0] = match.group(1)
 
         # With the input filename parameter as merge file if merge file is not specified
         if self.merge_file is None:
