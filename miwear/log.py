@@ -136,9 +136,7 @@ class CLIParametersParser:
 
         input_str = self.filename[0]
 
-        if input_str.isdigit():
-            pass
-        elif re.search(r"\d+", input_str):
+        if re.search(r"\d+", input_str):
             numbers = re.findall(r"\d+", input_str)
             if numbers:
                 self.filename[0] = numbers[0]
