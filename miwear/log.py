@@ -129,6 +129,10 @@ class CLIParametersParser:
             help="special log file name(default: tmp.log)",
         )
 
+        if (len(sys.argv)) <= 1:
+            arg_parser.print_help()
+            sys.exit(0)
+
         self.__cli_args = arg_parser.parse_args()
         if self.__cli_args.version:
             print("miwear_log version %s" % __version__)
