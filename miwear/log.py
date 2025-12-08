@@ -388,15 +388,37 @@ class LogTools:
             log.debug("merge file exist, will remove")
             os.remove(self.__cli_parser.merge_file)
 
-        cmd = "cat "
+        files_to_merge = []
         for file in file_list:
             if re.match(self.__cli_parser.filter_pattern, file) is None:
                 continue
-            cmd += os.path.join(self.log_dir_path, file) + " "
+            files_to_merge.append(os.path.join(self.log_dir_path, file))
 
-        cmd += ">" + " " + self.__cli_parser.merge_file
-        log.debug("merge file by command %s", cmd)
-        return ShellRunner.command_run(cmd)
+        if not files_to_merge:
+            log.warning("No files match the pattern to merge")
+            return False
+
+        try:
+            with open(self.__cli_parser.merge_file, "wb") as outfile:
+                for file_path in files_to_merge:
+                    log.debug(f"prepare merge file {file_path}")
+                    try:
+                        with open(file_path, "rb") as f:
+                            outfile.write(f.read())
+                    except Exception as e:
+                        log.warning(f"Failed to read {file_path}: {e}")
+                        continue
+
+            log.debug(
+                "Successfully merged %d files to %s",
+                len(files_to_merge),
+                self.__cli_parser.merge_file,
+            )
+            return True
+
+        except Exception as e:
+            log.error(f"Failed to merge files: {e}")
+            return False
 
 
 def CHECK_ERROR_EXIT(ret):
@@ -435,7 +457,7 @@ def main():
     CHECK_ERROR_EXIT(logtools.extract_special_files())
 
     # merge the log files to one file, then remove output dir
-    if logtools.merge_logfiles() == 0:
+    if logtools.merge_logfiles() is True:
         logtools.clear_output_dir(False)
     log.debug(Highlight.Convert("Successful", Highlight.GREEN))
 
