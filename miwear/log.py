@@ -424,6 +424,9 @@ class LogTools:
             log.error(f"Failed to merge files: {e}")
             return False
 
+    def get_merge_file(self):
+        return self.__cli_parser.merge_file
+
 
 def CHECK_ERROR_EXIT(ret):
     if ret:
@@ -464,6 +467,9 @@ def main():
     if logtools.merge_logfiles() is True:
         logtools.clear_output_dir(False)
     log.debug(Highlight.Convert("Successful", Highlight.GREEN))
+    log.debug(
+        f"All done, you can take a look now!(log file at [{logtools.get_merge_file()}])"
+    )
 
 
 if __name__ == "__main__":
