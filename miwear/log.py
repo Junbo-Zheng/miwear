@@ -142,11 +142,15 @@ class CLIParametersParser:
 
         if re.search(r"\d+", input_str):
             numbers = re.findall(r"\d+", input_str)
+            log.debug(f"filename number -> {numbers}")
             if numbers:
                 self.filename[0] = numbers[0]
                 log.debug(
                     f"Extracted number '{self.filename[0]}' from input '{input_str}'"
                 )
+
+            if len(numbers) > 1:
+                self.merge_file = os.path.join(os.getcwd(), numbers[-2] + ".log")
         else:
             pattern = r"^(.*?)\.tar.*\.gz$"
             match = re.match(pattern, input_str)
