@@ -4,6 +4,17 @@
 
 **Additionally**, `miwear_log` can merge all extracted files into a single new file. By default, the merged file is named `self.filename.log`, but you can customize the name using the `--merge_file` or `-m` option.
 
+## Installation
+
+This project requires the `pyserial` library for serial communication functionality. Install it using pip:
+
+```bash
+pip(3) install pyserial
+```
+
+If you want to use the `serialtool.py` tool for serial device interaction, make sure to install this dependency first.
+
+# File Layout
 For example, consider a compressed package named `123456_abc.tar.gz` containing other compressed files and logs:
 
 ```shell
