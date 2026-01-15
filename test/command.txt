@@ -1,0 +1,7 @@
+uptime
+
+ps
+
+hello
+
+free

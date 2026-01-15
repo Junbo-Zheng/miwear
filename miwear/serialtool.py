@@ -41,6 +41,7 @@ class SerialCommander:
         interval: float = 2.0,
         log_file: Optional[str] = None,
         count: int = -1,
+        response: bool = False,
     ):
         self.port = port
         self.baudrate = baudrate
@@ -53,6 +54,7 @@ class SerialCommander:
         self.log_enabled = log_file is not None
         self.count = count  # -1 means infinite, positive number means specific count
         self.current_count = 0  # Track current execution count
+        self.response = response
 
     def _log(self, message: str):
         """log message to file if logging is enabled"""
@@ -163,8 +165,8 @@ class SerialCommander:
                     if no_data_count >= 5:
                         break
 
-            # Display received data
-            if response:
+            # Display received data only if response is enabled
+            if response and self.response:
                 try:
                     response_text = response.decode("ascii", errors="replace").strip()
                     if response_text:
@@ -187,6 +189,9 @@ class SerialCommander:
                     rx_msg = f"{response!r} {e}"
                     print(rx_msg)
                     self._log(f"Rx(raw): {rx_msg}")
+            elif response:
+                # Just log the raw response without processing/displaying
+                self._log(f"Rx({len(response)} bytes): raw_data_not_processed")
             else:
                 msg = "no response"
                 # print(msg)
@@ -354,8 +359,11 @@ class SerialCommander:
             print(line)
             self._log(line)
 
-    def send_batch_commands(self, commands_file: str):
-        """Send batch commands from file"""
+    def send_batch_commands(
+        self, commands_file: str, interval: float = 2.0, count: int = -1
+    ):
+        """Send batch commands from file with optional interval and count"""
+
         try:
             with open(commands_file, "r", encoding="utf-8") as f:
                 commands = [
@@ -364,16 +372,50 @@ class SerialCommander:
                     if line.strip() and not line.startswith("#")
                 ]
 
+            if not commands:
+                msg = f"no valid commands found in {commands_file}"
+                print(msg)
+                self._log(msg)
+                return
+
             msg = f"read {len(commands)} commands from {commands_file}"
             print(msg)
             self._log(msg)
 
-            for i, cmd in enumerate(commands, 1):
-                msg = f"[{i}/{len(commands)}] sending: {cmd}"
-                print(msg)
-                self._log(msg)
-                self.send_command(cmd)
-                time.sleep(0.2)  # Interval between commands
+            count_msg = f"(count: {count})" if count != -1 else "(infinite)"
+            msg = (
+                f"starting batch command execution (interval: {interval}s) {count_msg}"
+            )
+            print(msg)
+            self._log(msg)
+            msg2 = "  Press Ctrl+C to stop"
+            print(msg2)
+            self._log(msg2)
+
+            self.current_count = 0
+            while self.running and (count == -1 or self.current_count < count):
+                for i, cmd in enumerate(commands, 1):
+                    if not self.running:
+                        break
+
+                    batch_msg = f"[{i}/{len(commands)}] sending: {cmd}"
+                    print(batch_msg)
+                    self._log(batch_msg)
+                    self.send_command(cmd)
+                    time.sleep(0.2)  # Interval between commands within batch
+
+                self.current_count += 1
+
+                # Check if we've reached the count limit
+                if count != -1 and self.current_count >= count:
+                    msg = f"Reached count limit ({count}), stopping batch execution"
+                    print(msg)
+                    self._log(msg)
+                    break
+
+                # Sleep between batch runs if not the last run
+                if self.running and (count == -1 or self.current_count < count):
+                    time.sleep(interval)
 
         except FileNotFoundError:
             msg = f"command file not found: {commands_file}"
@@ -454,9 +496,12 @@ Examples:
   %(prog)s -p /dev/ttyACM0 -b 921600                 # Open miniterm terminal (default behavior)
   %(prog)s -p /dev/ttyACM0 -b 921600 -c ""           # Open miniterm terminal (explicit)
   %(prog)s -p /dev/ttyUSB1 -b 115200 -c "ps"         # Send single command
+  %(prog)s -p /dev/ttyUSB1 -b 115200 -c "ps" -r      # Send single command with response processing
   %(prog)s -p /dev/ttyACM1 -i 1.0 -c "ps"            # Send command periodically
   %(prog)s -p /dev/ttyACM1 -i 1.0 -c "ps" --count 5  # Send command 5 times
-  %(prog)s -f commands.txt                           # Send batch commands from file
+  %(prog)s -f commands.txt                           # Send batch commands once
+  %(prog)s -f commands.txt -i 2.0                    # Send batch commands every 2 seconds
+  %(prog)s -f commands.txt -i 2.0 --count 5          # Send batch commands 5 times, every 2 seconds
   %(prog)s -s                                        # Save all output to miwear.log
   %(prog)s -s log.txt                                # Save all output to log.txt
   %(prog)s --version                                 # Show version information
@@ -495,7 +540,8 @@ Examples:
         "-f",
         "--file",
         type=str,
-        help="Path to file containing command list, one per line",
+        help="Path to file containing command list, one per line. Can be used with -i and --count "
+        "for repeated execution",
     )
 
     parser.add_argument(
@@ -522,6 +568,13 @@ Examples:
         type=int,
         default=-1,
         help="Number of periodic executions (-1 for infinite, default: -1)",
+    )
+
+    parser.add_argument(
+        "-r",
+        "--response",
+        action="store_true",
+        help="Process and display received data (default: disabled to avoid terminal interference)",
     )
 
     args = parser.parse_args()
@@ -551,8 +604,8 @@ Examples:
             print(f"failed to create log file: {e}")
             log_file = None
 
-    # Check if we should use miniterm (command is None or empty string)
-    if args.command is None or args.command == "":
+    # Check if we should use miniterm (command is None or empty string, but no file specified)
+    if (args.command is None or args.command == "") and not args.file:
         # Use miniterm for direct terminal access
         if not start_miniterm(args.port, args.baudrate):
             sys.exit(1)
@@ -560,7 +613,13 @@ Examples:
 
     # Create commander instance
     commander = SerialCommander(
-        args.port, args.baudrate, args.command, args.interval, log_file, args.count
+        args.port,
+        args.baudrate,
+        args.command,
+        args.interval,
+        log_file,
+        args.count,
+        args.response,
     )
 
     # Connect to serial port
@@ -570,8 +629,9 @@ Examples:
     try:
         # Mode selection
         if args.file:
-            # Batch command mode
-            commander.send_batch_commands(args.file)
+            # Batch command mode with interval and count support
+            commander.running = True
+            commander.send_batch_commands(args.file, args.interval, args.count)
         elif args.command and args.interval:
             # Periodic sending mode
             commander.start_periodic_send(args.command, args.interval, args.count)
