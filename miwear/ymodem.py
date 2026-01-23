@@ -839,6 +839,11 @@ def main():
     )
 
     args = parser.parse_args()
+
+    if not args.pull and not args.push:
+        print("Error: must specify --push or --pull")
+        return
+
     print(f"{V}ymodem transfer init, a moment please...{N}")
 
     fd_serial = serial.Serial(args.port, baudrate=args.baudrate)
@@ -860,19 +865,12 @@ def main():
         fd_serial.write(("sb %s\r\n" % (recvfile)).encode())
         # tmp = fd_serial.read(len(("sb %s\r\n" % (recvfile)).encode()))
     else:
-        if args.push:
-            if len(args.push) < 2:
-                print(
-                    "Error: --push requires at least one local file and a remote path"
-                )
-                fd_serial.close()
-                return
-            remote_path = args.push[-1]
-            local_files = args.push[:-1]
-            cmd = ("rb -f %s\r\n" % (remote_path)).encode()
-        else:
-            cmd = ("rb\r\n").encode()
-
+        if len(args.push) < 2:
+            print("Error: --push requires at least one local file and a remote path")
+            return
+        remote_path = args.push[-1]
+        local_files = args.push[:-1]
+        cmd = ("rb -f %s\r\n" % (remote_path)).encode()
         fd_serial.write(cmd)
         sleep(0.5)
         # length = fd_serial.read(len(cmd))
@@ -889,12 +887,6 @@ def main():
 
     if args.pull:
         tool.base_path = local_path
-    elif args.push:
-        pass  # local_files defined above
-    else:
-        print("Error: must specify --push or --pull")
-        fd_serial.close()
-        return
 
     tool.progress("ymodem start receiving\n" if args.pull else "ymodem start sending\n")
     if args.pull:
