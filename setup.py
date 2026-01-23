@@ -57,6 +57,7 @@ setup(
             "miwear_uz = miwear.unzip:main",
             "miwear_assert = miwear.assert:main",
             "miwear_serial = miwear.serialtool:main",
+            "miwear_ymodem = miwear.ymodem:main",
         ],
     },
 )
