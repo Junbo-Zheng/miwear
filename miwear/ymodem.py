@@ -383,6 +383,7 @@ class ymodem:
         maxretry=RETRIESMAX,
         debug="",
         customsize=0,
+        base_path=None,
     ):
         self.read = read
         self.write = write
@@ -392,6 +393,7 @@ class ymodem:
         self.progress = progress
         self.customsize = customsize
         self.retries = 0
+        self.base_path = base_path
 
         if debug != "":
             self.debugfd = open(debug, "w+")
@@ -703,7 +705,8 @@ class ymodem:
 
             self.write(ACK)
             self.write(CRC)
-            fd = open(filename, "wb+")
+            full_path = os.path.join(self.base_path or "", filename)
+            fd = open(full_path, "wb+")
             writensize = 0
             while writensize < filesize:
                 ret = self.recv_packet()
@@ -808,22 +811,22 @@ def main():
     parser.add_argument(
         "--pull",
         type=str,
-        nargs="*",
+        nargs="+",
         help="""
-            pull from board path
+            pull files from board to local path
             like this:
-                ./ymodem.py --pull <file1 [file2 [file 3]...]> -p /dev/ttyUBS0
+                ./ymodem.py --pull <remote_file1> [remote_file2 ...] <local_path> -p /dev/ttyACM1
             """,
     )
 
     parser.add_argument(
         "--push",
         type=str,
-        nargs=1,
+        nargs="+",
         help="""
-            send file to board path
+            send local files to board path
             like this:
-                ./ymodem.py --push <path on board> -t /dev/ttyUBS0 <file1 [file2 [file3] ...]>
+                ./ymodem.py --push <local_file1> [local_file2 ...] <remote_path> -p /dev/ttyACM1
             """,
     )
 
@@ -851,15 +854,26 @@ def main():
         fd_serial.reset_input_buffer()
 
         if args.pull:
-            recvfile = ""
-            for i in args.pull:
-                recvfile += i + " "
-
+            if len(args.pull) < 2:
+                print(
+                    "Error: --pull requires at least one remote file and a local path"
+                )
+                return
+            local_path = args.pull[-1]
+            remote_files = args.pull[:-1]
+            recvfile = " ".join(remote_files)
             fd_serial.write(("sb %s\r\n" % (recvfile)).encode())
             # tmp = fd_serial.read(len(("sb %s\r\n" % (recvfile)).encode()))
         else:
             if args.push:
-                cmd = ("rb -f %s\r\n" % (args.push[0])).encode()
+                if len(args.push) < 2:
+                    print(
+                        "Error: --push requires at least one local file and a remote path"
+                    )
+                    return
+                remote_path = args.push[-1]
+                local_files = args.push[:-1]
+                cmd = ("rb -f %s\r\n" % (remote_path)).encode()
             else:
                 cmd = ("rb\r\n").encode()
 
@@ -876,6 +890,9 @@ def main():
             clear=ymodem_ser_clear,
             maxretry=args.maxretry,
         )
+
+        if args.pull:
+            tool.base_path = local_path
     else:
         tool = ymodem(
             debug=args.debug, customsize=args.kblocksize * 1024, maxretry=args.maxretry
@@ -887,7 +904,7 @@ def main():
         tool.progress("\n")
     else:
         tool.progress("ymodem start sending\n")
-        tool.send(args.filelist)
+        tool.send(local_files if args.push else args.filelist)
         tool.progress("\n")
 
     if args.port:
