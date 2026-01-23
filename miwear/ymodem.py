@@ -852,6 +852,7 @@ def main():
     if args.pull:
         if len(args.pull) < 2:
             print("Error: --pull requires at least one remote file and a local path")
+            fd_serial.close()
             return
         local_path = args.pull[-1]
         remote_files = args.pull[:-1]
@@ -864,6 +865,7 @@ def main():
                 print(
                     "Error: --push requires at least one local file and a remote path"
                 )
+                fd_serial.close()
                 return
             remote_path = args.push[-1]
             local_files = args.push[:-1]
@@ -891,6 +893,7 @@ def main():
         pass  # local_files defined above
     else:
         print("Error: must specify --push or --pull")
+        fd_serial.close()
         return
 
     tool.progress("ymodem start receiving\n" if args.pull else "ymodem start sending\n")
