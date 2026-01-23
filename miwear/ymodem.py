@@ -866,9 +866,7 @@ def main():
         # tmp = fd_serial.read(len(("sb %s\r\n" % (recvfile)).encode()))
     else:
         if len(args.push) < 2:
-            print(
-                "Error: --push requires at least one local file and a remote path"
-            )
+            print("Error: --push requires at least one local file and a remote path")
             return
         remote_path = args.push[-1]
         local_files = args.push[:-1]
