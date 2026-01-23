@@ -859,6 +859,7 @@ def main():
             print("Error: --pull requires at least one remote file and a local path")
             fd_serial.close()
             return
+
         local_path = args.pull[-1]
         remote_files = args.pull[:-1]
         recvfile = " ".join(remote_files)
@@ -867,7 +868,9 @@ def main():
     else:
         if len(args.push) < 2:
             print("Error: --push requires at least one local file and a remote path")
+            fd_serial.close()
             return
+
         remote_path = args.push[-1]
         local_files = args.push[:-1]
         cmd = ("rb -f %s\r\n" % (remote_path)).encode()
