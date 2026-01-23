@@ -857,6 +857,7 @@ def main():
     if args.pull:
         if len(args.pull) < 2:
             print("Error: --pull requires at least one remote file and a local path")
+            fd_serial.close()
             return
         local_path = args.pull[-1]
         remote_files = args.pull[:-1]
