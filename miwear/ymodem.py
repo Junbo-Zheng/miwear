@@ -806,26 +806,24 @@ def main():
     )
 
     parser.add_argument(
-        "-r",
-        "--recvfrom",
+        "--pull",
         type=str,
         nargs="*",
         help="""
-            recvfile from board path
+            pull from board path
             like this:
-                ./ymodem.py -r <file1 [file2 [file 3]...]> -p /dev/ttyUBS0
+                ./ymodem.py --pull <file1 [file2 [file 3]...]> -p /dev/ttyUBS0
             """,
     )
 
     parser.add_argument(
-        "-s",
-        "--sendto",
+        "--push",
         type=str,
         nargs=1,
         help="""
             send file to board path
             like this:
-                ./ymodem.py -s <path on board> -t /dev/ttyUBS0 <file1 [file2 [file3] ...]>
+                ./ymodem.py --push <path on board> -t /dev/ttyUBS0 <file1 [file2 [file3] ...]>
             """,
     )
 
@@ -852,16 +850,16 @@ def main():
         sleep(0.5)
         fd_serial.reset_input_buffer()
 
-        if args.recvfrom:
+        if args.pull:
             recvfile = ""
-            for i in args.recvfrom:
+            for i in args.pull:
                 recvfile += i + " "
 
             fd_serial.write(("sb %s\r\n" % (recvfile)).encode())
             # tmp = fd_serial.read(len(("sb %s\r\n" % (recvfile)).encode()))
         else:
-            if args.sendto:
-                cmd = ("rb -f %s\r\n" % (args.sendto[0])).encode()
+            if args.push:
+                cmd = ("rb -f %s\r\n" % (args.push[0])).encode()
             else:
                 cmd = ("rb\r\n").encode()
 
