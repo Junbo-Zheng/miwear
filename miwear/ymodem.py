@@ -785,9 +785,6 @@ def main():
     print(f"{B}{'*' * 70}{N}\n")
 
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "filelist", help="if filelist is valid, that is sb, else is rb", nargs="*"
-    )
 
     parser.add_argument(
         "-k",
@@ -844,76 +841,71 @@ def main():
     args = parser.parse_args()
     print(f"{V}ymodem transfer init, a moment please...{N}")
 
-    if args.port:
-        fd_serial = serial.Serial(args.port, baudrate=args.baudrate)
-        fd_serial.reset_input_buffer()
+    fd_serial = serial.Serial(args.port, baudrate=args.baudrate)
+    fd_serial.reset_input_buffer()
 
-        cmd = ("setlogmask -r\r\n").encode()
-        fd_serial.write(cmd)
-        sleep(0.5)
-        fd_serial.reset_input_buffer()
+    cmd = ("setlogmask -r\r\n").encode()
+    fd_serial.write(cmd)
+    sleep(0.5)
+    fd_serial.reset_input_buffer()
 
-        if args.pull:
-            if len(args.pull) < 2:
+    if args.pull:
+        if len(args.pull) < 2:
+            print("Error: --pull requires at least one remote file and a local path")
+            return
+        local_path = args.pull[-1]
+        remote_files = args.pull[:-1]
+        recvfile = " ".join(remote_files)
+        fd_serial.write(("sb %s\r\n" % (recvfile)).encode())
+        # tmp = fd_serial.read(len(("sb %s\r\n" % (recvfile)).encode()))
+    else:
+        if args.push:
+            if len(args.push) < 2:
                 print(
-                    "Error: --pull requires at least one remote file and a local path"
+                    "Error: --push requires at least one local file and a remote path"
                 )
                 return
-            local_path = args.pull[-1]
-            remote_files = args.pull[:-1]
-            recvfile = " ".join(remote_files)
-            fd_serial.write(("sb %s\r\n" % (recvfile)).encode())
-            # tmp = fd_serial.read(len(("sb %s\r\n" % (recvfile)).encode()))
+            remote_path = args.push[-1]
+            local_files = args.push[:-1]
+            cmd = ("rb -f %s\r\n" % (remote_path)).encode()
         else:
-            if args.push:
-                if len(args.push) < 2:
-                    print(
-                        "Error: --push requires at least one local file and a remote path"
-                    )
-                    return
-                remote_path = args.push[-1]
-                local_files = args.push[:-1]
-                cmd = ("rb -f %s\r\n" % (remote_path)).encode()
-            else:
-                cmd = ("rb\r\n").encode()
+            cmd = ("rb\r\n").encode()
 
-            fd_serial.write(cmd)
-            sleep(0.5)
-            # length = fd_serial.read(len(cmd))
-            fd_serial.reset_input_buffer()
-
-        tool = ymodem(
-            debug=args.debug,
-            customsize=args.kblocksize * 1024,
-            read=ymodem_ser_read,
-            write=ymodem_ser_write,
-            clear=ymodem_ser_clear,
-            maxretry=args.maxretry,
-        )
-
-        if args.pull:
-            tool.base_path = local_path
-    else:
-        tool = ymodem(
-            debug=args.debug, customsize=args.kblocksize * 1024, maxretry=args.maxretry
-        )
-
-    if len(args.filelist) == 0:
-        tool.progress("ymodem start receiving\n")
-        tool.recv()
-        tool.progress("\n")
-    else:
-        tool.progress("ymodem start sending\n")
-        tool.send(local_files if args.push else args.filelist)
-        tool.progress("\n")
-
-    if args.port:
-        cmd = ("setlogmask -d\r\n").encode()
         fd_serial.write(cmd)
-        sleep(0.3)
+        sleep(0.5)
+        # length = fd_serial.read(len(cmd))
         fd_serial.reset_input_buffer()
-        fd_serial.write("\n".encode())
-        fd_serial.close()
+
+    tool = ymodem(
+        debug=args.debug,
+        customsize=args.kblocksize * 1024,
+        read=ymodem_ser_read,
+        write=ymodem_ser_write,
+        clear=ymodem_ser_clear,
+        maxretry=args.maxretry,
+    )
+
+    if args.pull:
+        tool.base_path = local_path
+    elif args.push:
+        pass  # local_files defined above
+    else:
+        print("Error: must specify --push or --pull")
+        return
+
+    tool.progress("ymodem start receiving\n" if args.pull else "ymodem start sending\n")
+    if args.pull:
+        tool.recv()
+    else:
+        tool.send(local_files)
+    tool.progress("\n")
+
+    cmd = ("setlogmask -d\r\n").encode()
+    fd_serial.write(cmd)
+    sleep(0.3)
+    fd_serial.reset_input_buffer()
+    fd_serial.write("\n".encode())
+    fd_serial.close()
 
 
 if __name__ == "__main__":
