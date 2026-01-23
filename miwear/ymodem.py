@@ -892,12 +892,11 @@ def main():
         tool.send(args.filelist)
         tool.progress("\n")
 
-    cmd = ("setlogmask -d\r\n").encode()
-    fd_serial.write(cmd)
-    sleep(0.3)
-    fd_serial.reset_input_buffer()
-
     if args.port:
+        cmd = ("setlogmask -d\r\n").encode()
+        fd_serial.write(cmd)
+        sleep(0.3)
+        fd_serial.reset_input_buffer()
         fd_serial.write("\n".encode())
         fd_serial.close()
 
