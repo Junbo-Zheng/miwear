@@ -59,6 +59,7 @@ setup(
             "miwear_serial = miwear.serialtool:main",
             "miwear_ymodem = miwear.ymodem:main",
             "miwear_check = miwear.check:main",
+            "miwear_loganalyzer = miwear.loganalyzer:main",
         ],
     },
 )

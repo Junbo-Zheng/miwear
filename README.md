@@ -6,7 +6,8 @@ A comprehensive Python Miwear toolkit to extract and process archive log files.
 
 - Supports batch extraction of `.tar.gz` , `.zip` and `.gz` files.
 - Command-line tools for log processing, validation, merging and unzipping.
-- Resource check tool for finding duplicate files, unused resources, and directory comparison.
+- Resource check tool for finding duplicate files, unused resources, and directory comparison, with automatic view variant detection and combined Markdown + HTML reports.
+- Log analyzer for parsing MiWear AppID and screen log entries into CSV or interactive HTML reports.
 - Serial command sender for interacting with serial devices (requires `pyserial`).
 - YMODEM file transfer over serial port (requires `pyserial`).
 - Designed for automation and integration into your workflow.
@@ -47,7 +48,8 @@ After installation, you get several standalone CLI tools:
 - `miwear_uz` : Versatile archive decompression utility.
 - `miwear_serial` : Serial command sender for interacting with serial devices (requires `pyserial`).
 - `miwear_ymodem` : YMODEM file transfer over serial port (requires `pyserial`).
-- `miwear_check` : Resource check tool for finding duplicate files, unused resources, and directory comparison.
+- `miwear_check` : Resource check tool for finding duplicate files, unused resources, and directory comparison. Generates Markdown + interactive HTML reports.
+- `miwear_loganalyzer` : Log analyzer for MiWear — parses AppID and screen log entries, exports CSV or interactive HTML reports.
 
 ## Usage Examples
 
@@ -103,10 +105,25 @@ miwear_uz --path ./logs
 miwear_check -d ./res -e bin
 ```
 
+Scan multiple extensions or filter by file-name prefix:
+
+```bash
+miwear_check -d ./res -e bin png
+miwear_check -d ./res -e bin -p theme_ config_
+```
+
 **Find duplicate files and delete duplicates:**
 
 ```bash
 miwear_check -d ./res -e bin --action delete
+```
+
+**Auto view variant detection (dup mode):**
+
+When the scan directory contains `view/` and `view_XX/` sub-directories with `res*` sub-directories (e.g., `view/res_480_480`, `view_65/res`), an interactive single-select menu is shown to pick one variant. The default selection is the variant with the most files. Skipped when `-i` is specified manually.
+
+```bash
+miwear_check -d ./applications -e bin png
 ```
 
 **Find unused resources:**
@@ -159,6 +176,16 @@ miwear_check -m diff --path1 ./design --path2 ./res --sort count
 - Uses `relative_dir/base_name` as the comparison key, so same filenames in different subdirectories are handled correctly
 - Reports files only in path1 (missing in path2), files only in path2 (extra), and common files
 - Shows per-directory file count statistics for both paths
+
+**Report output (Markdown + HTML):**
+
+All modes generate a Markdown report and an accompanying interactive HTML report; you are prompted to open the HTML file in your browser when finished.
+
+```bash
+miwear_check -d ./res -e bin -o my_report.md
+miwear_check -d ./res -e bin --no-output
+miwear_check -m unused -c ./apps -d ./res --code-ext ".c,.h,.cpp,.java"
+```
 
 ### 7. YMODEM File Transfer
 
@@ -253,6 +280,29 @@ miwear_serial -p /dev/ttyACM0 -b 921600
 ```
 
 Press Ctrl+] to exit miniterm.
+
+### 9. Log Analyzer
+
+Parse MiWear log files (AppID entries and screen transitions) and export to CSV or an interactive HTML report.
+
+Analyze all supported patterns (default) and write to `miwear.csv`:
+
+```bash
+miwear_loganalyzer -f 1.log
+```
+
+Export an interactive HTML report and open it in the browser:
+
+```bash
+miwear_loganalyzer -f 1.log --html --open-browser
+```
+
+Pick a specific analyzer (`appid`, `screen`, or `all`):
+
+```bash
+miwear_loganalyzer -f 1.log -t appid
+miwear_loganalyzer -f 1.log -t screen -o screens.csv
+```
 
 **Each tool includes a `--help` option to display supported parameters and usage:**
 
