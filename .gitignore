@@ -225,3 +225,6 @@ merged.log
 *__MACOSX
 
 test/
+
+*.csv
+*.html
