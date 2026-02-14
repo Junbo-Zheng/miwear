@@ -1,6 +1,6 @@
 # Python Miwear Tools Extract `log` Files
 
-`miwear_log` is a Python tool for extracting files with the `.tar.gz` suffix from either **local** or **remote** paths to a specified output directory. It also supports extracting all `.gz` files at the same time.
+`miwear_log` is a Python tool for extracting files with the `.tar.gz` suffix from either **local** or **remote** (Android phone via adb) paths to a specified output directory. It also supports extracting all `.gz` files at the same time.
 
 **Additionally**, `miwear_log` can merge all extracted files into a single new file. By default, the merged file is named `self.filename.log`, but you can customize the name using the `--merge_file` or `-m` option.
 
@@ -80,28 +80,34 @@ miwear_log --help
 Example output:
 
 ```
-Parameter Number : 2
-Shell Name       : miwear_log
-usage: miwear_log [-h] [-o OUTPUT_PATH [OUTPUT_PATH ...]] [-P [PASSWORD]] -s SOURCE_PATH [SOURCE_PATH ...] [-m [MERGE_FILE]] -f FILENAME [-p] [-F FILTER_PATTERN]
+usage: miwear_log [-h] [--version] [-o OUTPUT_PATH [OUTPUT_PATH ...]]
+                  [-m [MERGE_FILE]] [-f [FILENAME]] [--phone] [-p]
+                  [-F FILTER_PATTERN] [-l LOG]
+                  [file_path]
 
-Extract a file with the suffix `.tar.gz` from the source path or remote path and extract to output_path.
+Extract a file with the suffix `.tar.gz` from the source path or remote path
+and extract to output_path.
+
+positional arguments:
+  file_path             extract packet file path (positional argument),
+                        alternative to -f option
 
 options:
   -h, --help            show this help message and exit
+  --version             Show miwear_log version and exit.
   -o OUTPUT_PATH [OUTPUT_PATH ...], --output_path OUTPUT_PATH [OUTPUT_PATH ...]
-                        Output path for extracted files
-  -P [PASSWORD], --password [PASSWORD]
-                        Password for extraction and chmod
-  -s SOURCE_PATH [SOURCE_PATH ...], --source_path SOURCE_PATH [SOURCE_PATH ...]
-                        Source path(s) for extraction
+                        extract packet output path
   -m [MERGE_FILE], --merge_file [MERGE_FILE]
-                        Merge extracted files into a new file
-  -f FILENAME, --filename FILENAME
-                        Filename to extract (default suffix is .tar.gz, e.g., log.tar.gz)
+                        extract packet and merge to a new file
+  -f [FILENAME], --filename [FILENAME]
+                        extract file path (with full path or just filename),
+                        such as: /path/to/log.tar.gz or log.tar.gz
+  --phone               pull file from Android phone via adb
   -p, --purge_source_file
-                        Delete source file after extraction
+                        purge source file if is true
   -F FILTER_PATTERN, --filter_pattern FILTER_PATTERN
-                        Filter pattern for files to be merged
+                        filter the files to be merged
+  -l LOG, --log LOG     special log file name(default: tmp.log)
 ```
 
 ## Supported Extraction Methods
@@ -115,28 +121,42 @@ You can extract files from both local and remote sources:
 |  /sdcard/Android/data  |              |      |
 +------------------------+             \|/     |
                                                |
-                                              \|/    miwear_log
-                                               +-------------------> local output path
-                                              /|\                  (./file path by default)
+                                               \|/    miwear_log
+                                                +-------------------> local output path
+                                               /|\                  (./file path by default)
 +----------------------+               /|\     |
-|       Ubuntu         |                |      |
-|        22.04         |                |      |
-|  /home/mi/downloads  |     -----------+      |
+|       Local          |                |      |
+|   /path/to/file      |                |      |
++----------------------+     -----------+      |
 +----------------------+-----------------------+
 ```
 
-- **Ubuntu 22.04 LTS**: To extract a `.tar.gz` file from a local path, run:
+- **Local File**: To extract a `.tar.gz` file from a local path, run:
+
+    **Method 1: Using positional argument (recommended)**
 
     ```shell
-    miwear_log --password 1234 --filename 123456_abc --source_path /Users/junbozheng/test
+    miwear_log /Users/junbozheng/test/123456_abc.tar.gz
+    ```
+
+    **Method 2: Using -f option**
+
+    ```shell
+    miwear_log -f /Users/junbozheng/test/123456_abc.tar.gz
     ```
 
     If you have already downloaded the file, you can quickly extract it using `miwear_log`.
 
-- **Android Phone**: To extract a `.tar.gz` file from your phone, run:
+    You can also use just the filename if the file is in the current directory:
 
     ```shell
-    miwear_log --password 1234 --filename 123456_abc --source_path phone
+    miwear_log 123456_abc.tar.gz
+    ```
+
+- **Android Phone**: To extract a `.tar.gz` file from your phone via adb, run:
+
+    ```shell
+    miwear_log --phone -f 123456_abc
     ```
 
     `miwear_log` will use the `adb pull` command to transfer files from your phone to your local machine and then extract them.
