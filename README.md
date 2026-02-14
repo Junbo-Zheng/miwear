@@ -48,8 +48,22 @@ After installation, you get several standalone CLI tools:
 
 ### 1. Main Extraction Utility
 
+**Method 1: Using positional argument (recommended)**
+
 ```bash
-miwear_log -s ~/Downloads -f log.tar.gz
+miwear_log ~/Downloads/log.tar.gz
+```
+
+**Method 2: Using -f option**
+
+```bash
+miwear_log -f ~/Downloads/log.tar.gz
+```
+
+**Pull from Android phone via adb:**
+
+```bash
+miwear_log --phone -f 123456_abc
 ```
 
 ### 2. Assertion Log Parser

@@ -84,14 +84,7 @@ class CLIParametersParser:
             default=DefaultCLIParameters.output_path,
             help="extract packet output path",
         )
-        arg_parser.add_argument(
-            "-s",
-            "--source_path",
-            type=str,
-            nargs="+",
-            default=DefaultCLIParameters.source_path,
-            help="extract packet from source path",
-        )
+
         arg_parser.add_argument(
             "-m",
             "--merge_file",
@@ -103,9 +96,21 @@ class CLIParametersParser:
             "-f",
             "--filename",
             type=str,
-            nargs=1,
-            default=DefaultCLIParameters.file_name,
-            help="extract packet filename, the default file suffix is .tar.gz, such as: log.tar.gz",
+            nargs="?",
+            default=None,
+            help="extract file path (with full path or just filename), such as: /path/to/log.tar.gz or log.tar.gz",
+        )
+        arg_parser.add_argument(
+            "file_path",
+            type=str,
+            nargs="?",
+            default=None,
+            help="extract packet file path (positional argument), alternative to -f option",
+        )
+        arg_parser.add_argument(
+            "--phone",
+            action="store_true",
+            help="pull file from Android phone via adb",
         )
         arg_parser.add_argument(
             "-p",
@@ -138,28 +143,44 @@ class CLIParametersParser:
             print("miwear_log version %s" % __version__)
             sys.exit(0)
 
-        input_str = self.filename[0]
+        if self.__cli_args.filename is not None:
+            input_str = self.__cli_args.filename
+        elif self.__cli_args.file_path is not None:
+            input_str = self.__cli_args.file_path
+        else:
+            arg_parser.error(
+                "must provide file path via -f/--filename option or positional argument"
+            )
+            sys.exit(1)
 
-        if re.search(r"\d+", input_str):
-            numbers = re.findall(r"\d+", input_str)
+        if os.path.dirname(input_str):
+            self.source_path = [os.path.dirname(os.path.abspath(input_str))]
+            self.filename = [os.path.basename(input_str)]
+        else:
+            self.source_path = [os.getcwd()]
+            self.filename = [input_str]
+
+        base_name = self.filename[0]
+        if re.search(r"\d+", base_name):
+            numbers = re.findall(r"\d+", base_name)
             log.debug(f"filename number -> {numbers}")
             if numbers:
-                self.filename[0] = numbers[0]
+                base_name = numbers[0]
                 log.debug(
-                    f"Extracted number '{self.filename[0]}' from input '{input_str}'"
+                    f"Extracted number '{base_name}' from input '{self.filename[0]}'"
                 )
 
             if len(numbers) > 1:
                 self.merge_file = os.path.join(os.getcwd(), numbers[-2] + ".log")
         else:
             pattern = r"^(.*?)\.tar.*\.gz$"
-            match = re.match(pattern, input_str)
+            match = re.match(pattern, base_name)
             if match:
-                self.filename[0] = match.group(1)
+                base_name = match.group(1)
 
         # With the input filename parameter as merge file if merge file is not specified
         if self.merge_file is None:
-            self.merge_file = os.path.join(os.getcwd(), self.filename[0] + ".log")
+            self.merge_file = os.path.join(os.getcwd(), base_name + ".log")
 
         log.debug("output_path      :%s", self.output_path)
         log.debug("source_path      :%s", self.source_path)
@@ -207,29 +228,28 @@ class LogTools:
         return ShellRunner.command_run(cmd)
 
     def pull_packet(self):
-        if self.__cli_parser.source_path[0] == "phone":
-            self.__cli_parser.source_path[0] = DefaultCLIParameters.remote_path
-            adb_cmd = "adb pull " + self.__cli_parser.source_path[0] + " " + "./"
+        if self.__cli_parser.phone:
+            adb_cmd = "adb pull " + DefaultCLIParameters.remote_path + " ./"
             log.debug(adb_cmd)
             ShellRunner.command_run(adb_cmd)
 
-            file = (
-                os.getcwd()
-                + "/devicelog/**/"
-                + "*"
-                + self.__cli_parser.filename[0]
-                + "*.tar*.gz"
-            )
+            filename = self.__cli_parser.filename[0]
+            file = os.getcwd() + "/devicelog/**/" + "*" + filename + "*.tar*.gz"
             result = glob.glob(file, recursive=True)
         else:
-            pattern = (
-                self.__cli_parser.source_path[0]
-                + "/"
-                + "*"
-                + self.__cli_parser.filename[0]
-                + "*.tar*.gz"
-            )
-            result = glob.glob(pattern)
+            filename = self.__cli_parser.filename[0]
+            if ".tar" in filename and ".gz" in filename:
+                file_path = os.path.join(self.__cli_parser.source_path[0], filename)
+                result = [file_path] if os.path.exists(file_path) else []
+            else:
+                pattern = (
+                    self.__cli_parser.source_path[0]
+                    + "/"
+                    + "*"
+                    + filename
+                    + "*.tar*.gz"
+                )
+                result = glob.glob(pattern)
 
         if len(result) == 0:
             log.error(
@@ -254,7 +274,18 @@ class LogTools:
             file = result[0]
 
         path = os.path.dirname(file)
-        output = self.__cli_parser.filename[0] + "_" + DefaultCLIParameters.output_file
+        filename_base = self.__cli_parser.filename[0]
+        if ".tar.gz" in filename_base:
+            filename_base = (
+                filename_base.replace(".tar.gz", "")
+                .replace(".tar", "")
+                .replace(".gz", "")
+            )
+        elif ".tar" in filename_base:
+            filename_base = filename_base.replace(".tar", "").replace(".gz", "")
+        elif ".gz" in filename_base:
+            filename_base = filename_base.replace(".gz", "")
+        output = filename_base + "_" + DefaultCLIParameters.output_file
         output = os.path.join(path, output)
 
         if self.__cli_parser.purge_source_file:
