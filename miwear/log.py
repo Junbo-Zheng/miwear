@@ -431,6 +431,53 @@ class LogTools:
     def get_merge_file(self):
         return self.__cli_parser.merge_file
 
+    def merge_txt_files(self):
+        if self.log_dir_path is None or not os.path.exists(self.log_dir_path):
+            log.warning("Log directory not found, skip merging txt files")
+            return False
+
+        txt_files = []
+        for root, dirs, files in os.walk(self.log_dir_path):
+            for file in files:
+                if file.lower().startswith("crash") and file.lower().endswith(".txt"):
+                    txt_files.append(os.path.join(root, file))
+
+        if not txt_files:
+            log.debug("No crash txt files found to merge")
+            return False
+
+        txt_files.sort()
+        log.debug(Highlight.Convert("merge crash txt") + " file list %s", txt_files)
+
+        merge_file_base = os.path.splitext(self.__cli_parser.merge_file)[0]
+        txt_merge_file = merge_file_base + ".txt"
+
+        if os.path.exists(txt_merge_file):
+            log.debug("txt merge file exists, will remove")
+            os.remove(txt_merge_file)
+
+        try:
+            with open(txt_merge_file, "wb") as outfile:
+                for file_path in txt_files:
+                    log.debug(f"prepare merge crash txt file {file_path}")
+                    try:
+                        with open(file_path, "rb") as f:
+                            outfile.write(f.read())
+                    except Exception as e:
+                        log.warning(f"Failed to read {file_path}: {e}")
+                        continue
+
+            log.debug(
+                "Successfully merged %d crash txt files to %s",
+                len(txt_files),
+                txt_merge_file,
+            )
+            return True
+
+        except Exception as e:
+            log.error(f"Failed to merge crash txt files: {e}")
+            return False
+
 
 def CHECK_ERROR_EXIT(ret):
     if ret:
@@ -468,8 +515,21 @@ def main():
     CHECK_ERROR_EXIT(logtools.extract_special_files())
 
     # merge the log files to one file, then remove output dir
-    if logtools.merge_logfiles() is True:
+    merge_success = logtools.merge_logfiles()
+
+    # merge crash txt files before removing output dir
+    txt_merge_success = logtools.merge_txt_files()
+    if txt_merge_success is True:
+        merge_file_base = os.path.splitext(logtools.get_merge_file())[0]
+        txt_merge_file = merge_file_base + ".txt"
+        log.debug(
+            Highlight.Convert("crash txt", Highlight.GREEN)
+            + f" file at [{txt_merge_file}]"
+        )
+
+    if merge_success is True:
         logtools.clear_output_dir(False)
+
     log.debug(Highlight.Convert("Successful", Highlight.GREEN))
     log.debug(
         f"All done, you can take a look now!(log file at [{logtools.get_merge_file()}])"
