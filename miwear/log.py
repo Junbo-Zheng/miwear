@@ -376,15 +376,30 @@ class LogTools:
             shutil.copy(special_file, des_path)
         return 0
 
+    def __is_gzip_file__(self, filepath):
+        try:
+            with open(filepath, "rb") as f:
+                magic = f.read(2)
+                return magic == b"\x1f\x8b"  # gzip magic bytes
+        except Exception:
+            return False
+
     def extract_packet(self):
         if not os.path.exists(self.__cli_parser.output_path):
             os.makedirs(self.__cli_parser.output_path)
 
-        cmd = "gzip -d " + self.log_packet_path
-        log.debug(Highlight.Convert("gzip") + " by command " + cmd)
-        ShellRunner.command_run(cmd)
+        if self.__is_gzip_file__(self.log_packet_path):
+            cmd = "gzip -d " + self.log_packet_path
+            log.debug(Highlight.Convert("gzip") + " by command " + cmd)
+            ShellRunner.command_run(cmd)
+            tar_package = self.log_packet_path.replace(".gz", "")
+        else:
+            log.debug(
+                Highlight.Convert("skip gzip")
+                + " - file is not gzip compressed, treating as tar archive"
+            )
+            tar_package = self.log_packet_path
 
-        tar_package = self.log_packet_path.replace(".gz", "")
         cmd = "tar -xvf " + tar_package + " -C " + self.__cli_parser.output_path
         log.debug(Highlight.Convert("tar") + " by command " + cmd)
 
@@ -403,8 +418,11 @@ class LogTools:
             )
             return -1
 
-        # tar_package is tmp file, since it's has replaced from .tar.gz to .tar, let's remove it
-        os.remove(tar_package)
+        if (
+            tar_package != self.log_packet_path
+            or not self.__cli_parser.purge_source_file
+        ):
+            os.remove(tar_package)
 
         # find log files dir path
         if self.__find_logfiles_path__() != 0:
