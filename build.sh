@@ -6,7 +6,7 @@ flake8 . --count --show-source --statistics
 
 black --check --diff .
 
-./miwear/log.py -s ./test --filename 123
+./miwear/log.py --filename ./test/123.tar.gz
 
 ./miwear/targz.py --path test
 
@@ -16,4 +16,4 @@ black --check --diff .
 
 md5sum -c test/123.md5
 
-./miwear/log.py -s test -f ./test/456（1）.tar.gz
+./miwear/log.py ./test/456（1）.tar.gz
