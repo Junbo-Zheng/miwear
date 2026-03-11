@@ -40,7 +40,7 @@ setup(
     author_email="3273070@qq.com",
     url="https://github.com/Junbo-Zheng/miwear",
     packages=["miwear"],
-    python_requires=">=3.7",
+    python_requires=">=3.10",
     license="Apache-2.0",
     classifiers=[
         "Programming Language :: Python :: 3",
