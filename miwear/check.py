@@ -486,7 +486,7 @@ def find_unused_resources(
     for bin_path in bin_files:
         basename = os.path.basename(bin_path)
         raw_stem = os.path.splitext(basename)[0]
-        stem = raw_stem.strip("_ \t0123456789")
+        stem = raw_stem.strip("_ \t")
         if not stem:
             stem = raw_stem
         stem_to_paths[stem].append(bin_path)
