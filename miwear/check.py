@@ -475,10 +475,15 @@ def find_unused_resources(
 
     # Build stem -> [resource_paths] mapping
     stem_to_paths: Dict[str, List[str]] = defaultdict(list)
+    # Pre-compute base stems (strip trailing digits) for numbered files
+    stem_to_base: Dict[str, str] = {}
     for bin_path in bin_files:
         basename = os.path.basename(bin_path)
         stem = os.path.splitext(basename)[0]
         stem_to_paths[stem].append(bin_path)
+        base = re.sub(r"\d+$", "", stem)
+        if base and base != stem:
+            stem_to_base[stem] = base
 
     referenced_files: Set[str] = set()
     match_details: Dict[str, str] = {}
@@ -511,12 +516,28 @@ def find_unused_resources(
             except (IOError, OSError):
                 continue
 
-            newly_matched = []
+            # Fast pre-filter: only check stems that appear as
+            # substring in this file (plain `in` is ~100x faster
+            # than regex).  Also include stems whose base_stem
+            # appears (for numbered files like anim0 -> anim).
+            candidates = set()
             for stem in unmatched_stems:
+                if stem in content:
+                    candidates.add(stem)
+                elif stem in stem_to_base:
+                    base = stem_to_base[stem]
+                    if base in content:
+                        candidates.add(stem)
+
+            if not candidates:
+                continue
+
+            newly_matched = []
+            rel_code = os.path.relpath(filepath, root)
+            for stem in candidates:
                 if _is_referenced_in_content(stem, content):
                     for bin_path in stem_to_paths[stem]:
                         referenced_files.add(bin_path)
-                    rel_code = os.path.relpath(filepath, root)
                     match_details[stem] = rel_code
                     newly_matched.append(stem)
 
@@ -524,8 +545,8 @@ def find_unused_resources(
                 unmatched_stems.discard(stem)
 
     print(
-        f"Scanned {file_count} code files, matched {len(referenced_files)} "
-        f"resource files" + " " * 20
+        f"Scanned {file_count} code files, "
+        f"matched {len(referenced_files)}/{len(bin_files)} resource files" + " " * 20
     )
 
     unused_files = {
