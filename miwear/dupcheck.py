@@ -4,9 +4,11 @@ Duplicate File Finder with Delete Action
 Scan specified path for duplicate files by extension or prefix, and optionally delete them
 
 Usage:
-    python miwear_dupcheck.py [PATH] [--ext EXT] [--prefix PREFIX]
-    python miwear_dupcheck.py --ext .bin                              # Scan .bin files
-    python miwear_dupcheck.py --ext .bin --action delete              # Delete duplicates
+    python dupcheck.py [PATH] [--ext EXT] [--prefix PREFIX]
+    python dupcheck.py --ext .bin                              # Scan .bin files
+    python dupcheck.py --ext .bin .png                         # Scan .bin and .png files
+    python dupcheck.py --ext .bin,.png                         # Comma-separated
+    python dupcheck.py --ext .bin --action delete              # Delete duplicates
 """
 
 import argparse
@@ -307,8 +309,10 @@ def main():
 Examples:
   %(prog)s                                          # Scan all files
   %(prog)s --ext .bin                               # Scan .bin files
-  %(prog)s --ext .bin --ext .png                    # Scan .bin and .png files
+  %(prog)s --ext .bin .png                          # Scan .bin and .png files
+  %(prog)s --ext .bin,.png                          # Scan .bin and .png files (comma-separated)
   %(prog)s --prefix config_                         # Scan files starting with config_
+  %(prog)s --prefix theme_ config_                  # Scan files starting with theme_ or config_
   %(prog)s --ext .bin --action delete               # Delete duplicate .bin files
 
 Filtering Rules:
@@ -331,16 +335,18 @@ Delete Action:
     parser.add_argument(
         "-e",
         "--ext",
-        action="append",
+        action="extend",
+        nargs="+",
         metavar="EXT",
-        help="File extension to scan (can be used multiple times)",
+        help="File extension to scan (e.g., --ext .bin .png or --ext .bin,.png)",
     )
     parser.add_argument(
         "-p",
         "--prefix",
-        action="append",
+        action="extend",
+        nargs="+",
         metavar="PREFIX",
-        help="File name prefix to scan (can be used multiple times)",
+        help="File name prefix to scan (e.g., --prefix theme_ config_ or --prefix theme_,config_)",
     )
     parser.add_argument(
         "-a",
@@ -389,14 +395,25 @@ Delete Action:
 
     extensions: Set[str] = set()
     if args.ext:
-        extensions.update(
-            ext.strip() if ext.strip().startswith(".") else f".{ext.strip()}"
-            for ext in args.ext
-        )
+        for ext in args.ext:
+            if "," in ext:
+                for e in ext.split(","):
+                    e = e.strip()
+                    if e:
+                        extensions.add(e if e.startswith(".") else f".{e}")
+            else:
+                extensions.add(ext if ext.startswith(".") else f".{ext}")
 
     prefixes: Set[str] = set()
     if args.prefix:
-        prefixes.update(prefix.strip() for prefix in args.prefix if prefix.strip())
+        for prefix in args.prefix:
+            if "," in prefix:
+                for p in prefix.split(","):
+                    p = p.strip()
+                    if p:
+                        prefixes.add(p)
+            else:
+                prefixes.add(prefix)
 
     print("=" * 60)
     print("Duplicate File Detector")
