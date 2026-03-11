@@ -21,9 +21,9 @@ Unused .bin Resource File Finder
 Scan code for .bin file references and find unused resources
 
 Usage:
-    python unused_bin.py --code /path/to/code --resource /path/to/res
-    python unused_bin.py -c /path/to/code -r /path/to/res --output report.md
-    python unused_bin.py -c /path/to/code -r /path/to/res --prefix "/resource/app:/rgb888/app"
+    python unusedcheck.py --code /path/to/code --resource /path/to/res
+    python unusedcheck.py -c /path/to/code -r /path/to/res --output report.md
+    python unusedcheck.py -c /path/to/code -r /path/to/res --prefix "/resource/app:/rgb888/app"
 """
 
 import argparse
@@ -351,8 +351,8 @@ Prefix Mapping:
         "-o",
         "--output",
         metavar="FILE",
-        default="unused_bins_report.md",
-        help="Output report filename (default: unused_bins_report.md)",
+        default="unused_files_report.md",
+        help="Output report filename (default: unused_files_report.md)",
     )
 
     parser.add_argument(
