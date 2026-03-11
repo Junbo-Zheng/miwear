@@ -26,10 +26,10 @@ Usage:
     python check.py -d ./res -e bin --action delete
 
     # Find unused resources
-    python check.py --mode unused -c ./apps -r ./res
+    python check.py --mode unused -c ./apps -d ./res
 
     # Run both checks
-    python check.py --mode both -d ./res -c ./apps -r ./res -e bin
+    python check.py --mode both -d ./res -c ./apps -e bin
 """
 
 import argparse
@@ -739,8 +739,8 @@ def run_unused_mode(args):
         print(f"Error: Code path does not exist: {args.code}", file=sys.stderr)
         sys.exit(1)
 
-    if not os.path.isdir(args.resource):
-        print(f"Error: Resource path does not exist: {args.resource}", file=sys.stderr)
+    if not os.path.isdir(args.dir):
+        print(f"Error: Resource path does not exist: {args.dir}", file=sys.stderr)
         sys.exit(1)
 
     ignore_dirs = parse_ignore_dirs(args)
@@ -755,7 +755,7 @@ def run_unused_mode(args):
     print("=" * 60)
     print()
 
-    bin_files = scan_bin_files(args.resource, ignore_dirs)
+    bin_files = scan_bin_files(args.dir, ignore_dirs)
 
     print()
     print("Analyzing unused resources...")
@@ -772,7 +772,7 @@ def run_unused_mode(args):
         len(bin_files),
         total_size,
         os.path.abspath(args.code),
-        os.path.abspath(args.resource),
+        os.path.abspath(args.dir),
         ignore_dirs,
         output_file,
     )
@@ -844,7 +844,7 @@ def run_both_mode(args):
     unused_files = {}
     bin_files = {}
 
-    if args.code and args.resource:
+    if args.code:
         print()
         print("-" * 60)
         print("Step 2: Checking for unused resources...")
@@ -852,18 +852,13 @@ def run_both_mode(args):
 
         if not os.path.isdir(args.code):
             print(f"Warning: Code path does not exist: {args.code}", file=sys.stderr)
-        elif not os.path.isdir(args.resource):
-            print(
-                f"Warning: Resource path does not exist: {args.resource}",
-                file=sys.stderr,
-            )
         else:
             file_extensions: Set[str] = set(
                 ext.strip() if ext.strip().startswith(".") else f".{ext.strip()}"
                 for ext in args.code_ext.split(",")
             )
 
-            bin_files = scan_bin_files(args.resource, ignore_dirs)
+            bin_files = scan_bin_files(args.dir, ignore_dirs)
             print()
             print("Analyzing unused resources...")
             unused_files, matched = find_unused_resources(
@@ -879,7 +874,7 @@ def run_both_mode(args):
     else:
         print()
         print("-" * 60)
-        print("Step 2: Skipped (no --code and --resource paths specified)")
+        print("Step 2: Skipped (no --code path specified)")
         print("-" * 60)
 
     # Step 3: Generate combined report
@@ -898,7 +893,7 @@ def run_both_mode(args):
         sum(size for _, size in bin_files.values()) if bin_files else 0,
         os.path.abspath(args.dir),
         os.path.abspath(args.code) if args.code else "",
-        os.path.abspath(args.resource) if args.resource else "",
+        os.path.abspath(args.dir),
         ignore_dirs,
         extensions,
         prefixes,
@@ -1106,11 +1101,11 @@ Examples:
   %(prog)s -d ./res -e bin --action delete
 
   # Find unused resources
-  %(prog)s --mode unused -c ./apps -r ./res
-  %(prog)s --mode unused -c ./apps -r ./res --prefix "/resource/app:"
+  %(prog)s --mode unused -c ./apps -d ./res
+  %(prog)s --mode unused -c ./apps -d ./res --prefix "/resource/app:"
 
   # Run both checks
-  %(prog)s --mode both -d ./res -c ./apps -r ./res -e bin
+  %(prog)s --mode both -d ./res -c ./apps -e bin
 
 Mode Description:
   dup     - Find duplicate files by content hash
@@ -1133,7 +1128,7 @@ Mode Description:
         "--dir",
         metavar="PATH",
         default=".",
-        help="Root directory to scan for duplicates (default: current directory)",
+        help="Target directory to scan (duplicates scan dir or resource dir, default: current directory)",
     )
     parser.add_argument(
         "-i",
@@ -1195,12 +1190,6 @@ Mode Description:
         help="Code directory to scan for .bin references (required for unused/both mode)",
     )
     parser.add_argument(
-        "-r",
-        "--resource",
-        metavar="PATH",
-        help="Resource directory containing .bin files (required for unused/both mode)",
-    )
-    parser.add_argument(
         "--code-ext",
         metavar="EXTS",
         default=".c,.h,.cpp,.hpp,.cc,.cxx,.py,.java,.js,.ts,.json",
@@ -1215,9 +1204,6 @@ Mode Description:
     if args.mode == "unused":
         if not args.code:
             print("Error: --code is required for unused mode", file=sys.stderr)
-            sys.exit(1)
-        if not args.resource:
-            print("Error: --resource is required for unused mode", file=sys.stderr)
             sys.exit(1)
 
     # Execute based on mode
