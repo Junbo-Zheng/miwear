@@ -22,15 +22,14 @@ Features: Find duplicate files + Find unused resources
 
 Usage:
     # Find duplicate files (default mode)
-    python check.py -i node_modules --ext .bin
-    python check.py --mode dup --ext .bin --action delete
+    python check.py -d ./res -e bin
+    python check.py -d ./res -e bin --action delete
 
     # Find unused resources
     python check.py --mode unused -c ./apps -r ./res
-    python check.py --mode unused -c ./apps -r ./res --prefix "/resource/app:"
 
     # Run both checks
-    python check.py --mode both -c ./apps -r ./res -i node_modules --ext .bin
+    python check.py --mode both -d ./res -c ./apps -r ./res -e bin
 """
 
 import argparse
@@ -672,9 +671,9 @@ def parse_prefix_mapping(mapping_str: str) -> Tuple[str, str]:
 
 def run_dup_mode(args):
     """Run duplicate files detection mode"""
-    if not os.path.isdir(args.path):
+    if not os.path.isdir(args.dir):
         print(
-            f"Error: Path does not exist or is not a directory: {args.path}",
+            f"Error: Path does not exist or is not a directory: {args.dir}",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -689,7 +688,7 @@ def run_dup_mode(args):
     print()
 
     hash_to_files, total_files, total_size = scan_files_for_duplicates(
-        args.path, ignore_dirs, extensions, prefixes
+        args.dir, ignore_dirs, extensions, prefixes
     )
 
     print("\nAnalyzing duplicate files...")
@@ -702,7 +701,7 @@ def run_dup_mode(args):
     print(f"Found {len(duplicates)} groups of duplicate files")
 
     if args.action == "delete":
-        execute_delete_action(args.path, duplicates)
+        execute_delete_action(args.dir, duplicates)
     else:
         print("\nNo action specified. Use --action delete to remove duplicate files.")
 
@@ -712,7 +711,7 @@ def run_dup_mode(args):
         duplicates,
         total_files,
         total_size,
-        os.path.abspath(args.path),
+        os.path.abspath(args.dir),
         ignore_dirs,
         extensions,
         prefixes,
@@ -813,9 +812,9 @@ def run_both_mode(args):
     print("Step 1: Checking for duplicate files...")
     print("-" * 60)
 
-    if not os.path.isdir(args.path):
+    if not os.path.isdir(args.dir):
         print(
-            f"Error: Path does not exist or is not a directory: {args.path}",
+            f"Error: Path does not exist or is not a directory: {args.dir}",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -825,7 +824,7 @@ def run_both_mode(args):
     prefixes = parse_prefixes(args)
 
     hash_to_files, total_files, total_size = scan_files_for_duplicates(
-        args.path, ignore_dirs, extensions, prefixes
+        args.dir, ignore_dirs, extensions, prefixes
     )
 
     print("\nAnalyzing duplicate files...")
@@ -900,7 +899,7 @@ def run_both_mode(args):
         total_size,
         len(bin_files),
         sum(size for _, size in bin_files.values()) if bin_files else 0,
-        os.path.abspath(args.path),
+        os.path.abspath(args.dir),
         os.path.abspath(args.code) if args.code else "",
         os.path.abspath(args.resource) if args.resource else "",
         ignore_dirs,
@@ -1106,15 +1105,15 @@ def main():
         epilog="""
 Examples:
   # Find duplicate files (default mode)
-  %(prog)s -i node_modules --ext .bin
-  %(prog)s --ext .bin --action delete
+  %(prog)s -d ./res -e bin
+  %(prog)s -d ./res -e bin --action delete
   
   # Find unused resources
   %(prog)s --mode unused -c ./apps -r ./res
   %(prog)s --mode unused -c ./apps -r ./res --prefix "/resource/app:"
   
   # Run both checks
-  %(prog)s --mode both -c ./apps -r ./res -i node_modules --ext .bin
+  %(prog)s --mode both -d ./res -c ./apps -r ./res -e bin
 
 Mode Description:
   dup     - Find duplicate files by content hash
@@ -1133,8 +1132,9 @@ Mode Description:
 
     # Common arguments
     parser.add_argument(
-        "path",
-        nargs="?",
+        "-d",
+        "--dir",
+        metavar="PATH",
         default=".",
         help="Root directory to scan for duplicates (default: current directory)",
     )
