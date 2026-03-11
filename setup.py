@@ -58,6 +58,8 @@ setup(
             "miwear_assert = miwear.assert:main",
             "miwear_serial = miwear.serialtool:main",
             "miwear_ymodem = miwear.ymodem:main",
+            "miwear_dupcheck = miwear.dupcheck:main",
+            "miwear_unusedcheck = miwear.unusedcheck:main",
         ],
     },
 )
