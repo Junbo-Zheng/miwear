@@ -6,7 +6,7 @@ Scan specified path for duplicate files by extension or prefix, and optionally d
 Usage:
     python miwear_dupcheck.py [PATH] [--ext EXT] [--prefix PREFIX]
     python miwear_dupcheck.py --ext .bin                              # Scan .bin files
-    python miwear_dupcheck.py --ext .bin --action delete --confirm    # Delete duplicates
+    python miwear_dupcheck.py --ext .bin --action delete              # Delete duplicates
 """
 
 import argparse
@@ -140,18 +140,8 @@ def find_duplicates(
 
 
 def execute_delete_action(
-    root_path: str, duplicates: Dict[str, Tuple[List[str], int]], confirm: bool
+    root_path: str, duplicates: Dict[str, Tuple[List[str], int]]
 ) -> bool:
-    if not confirm:
-        print(f"\nFound {len(duplicates)} groups of duplicate files")
-        print("Use --confirm flag to proceed with deletion")
-        print("\nFiles that will be deleted (keeping one copy from each group):")
-
-        for file_paths, file_size in duplicates.values():
-            for path in file_paths[1:]:
-                print(f"  - {path} ({format_size(file_size)})")
-        return False
-
     print(f"\nDeleting duplicate files from {len(duplicates)} groups...")
 
     deleted_count = 0
@@ -319,7 +309,7 @@ Examples:
   %(prog)s --ext .bin                               # Scan .bin files
   %(prog)s --ext .bin --ext .png                    # Scan .bin and .png files
   %(prog)s --prefix config_                         # Scan files starting with config_
-  %(prog)s --ext .bin --action delete --confirm     # Delete duplicate .bin files
+  %(prog)s --ext .bin --action delete               # Delete duplicate .bin files
 
 Filtering Rules:
   - No --ext and no --prefix: Scan ALL files (default)
@@ -329,7 +319,6 @@ Filtering Rules:
 
 Delete Action:
   - --action delete: Delete duplicate files (keeping one copy from each group)
-  - --confirm: Required for delete action to prevent accidental deletion
         """,
     )
 
@@ -361,11 +350,6 @@ Delete Action:
         help="Action to execute (only 'delete' supported)",
     )
     parser.add_argument(
-        "--confirm",
-        action="store_true",
-        help="Confirm delete action (required for safety)",
-    )
-    parser.add_argument(
         "-i",
         "--ignore",
         metavar="DIRS",
@@ -395,10 +379,6 @@ Delete Action:
             f"Error: Path does not exist or is not a directory: {args.path}",
             file=sys.stderr,
         )
-        sys.exit(1)
-
-    if args.action == "delete" and not args.confirm:
-        print("Error: --confirm flag is required for delete action", file=sys.stderr)
         sys.exit(1)
 
     ignore_dirs: Set[str] = set()
@@ -437,7 +417,7 @@ Delete Action:
     print(f"Found {len(duplicates)} groups of duplicate files")
 
     if args.action == "delete":
-        execute_delete_action(args.path, duplicates, args.confirm)
+        execute_delete_action(args.path, duplicates)
     else:
         print("\nNo action specified. Use --action delete to remove duplicate files.")
 
