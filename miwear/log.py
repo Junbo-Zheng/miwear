@@ -23,6 +23,7 @@ import os
 import gzip
 import glob
 import re
+import shlex
 import logging as log
 
 import argparse
@@ -217,7 +218,7 @@ class LogTools:
             if input_str != "Y":
                 log.debug("quit and exit")
                 return -1
-        cmd = "rm -rf " + self.__cli_parser.output_path
+        cmd = "rm -rf " + shlex.quote(self.__cli_parser.output_path)
         # fmt: off
         log.debug(
             Highlight.Convert("clear") + " exist file %s by command %s",
@@ -229,7 +230,9 @@ class LogTools:
 
     def pull_packet(self):
         if self.__cli_parser.phone:
-            adb_cmd = "adb pull " + DefaultCLIParameters.remote_path + " ./"
+            adb_cmd = (
+                "adb pull " + shlex.quote(DefaultCLIParameters.remote_path) + " ./"
+            )
             log.debug(adb_cmd)
             ShellRunner.command_run(adb_cmd)
 
@@ -389,7 +392,7 @@ class LogTools:
             os.makedirs(self.__cli_parser.output_path)
 
         if self.__is_gzip_file__(self.log_packet_path):
-            cmd = "gzip -d " + self.log_packet_path
+            cmd = "gzip -d " + shlex.quote(self.log_packet_path)
             log.debug(Highlight.Convert("gzip") + " by command " + cmd)
             ShellRunner.command_run(cmd)
             tar_package = self.log_packet_path.replace(".gz", "")
@@ -400,7 +403,12 @@ class LogTools:
             )
             tar_package = self.log_packet_path
 
-        cmd = "tar -xvf " + tar_package + " -C " + self.__cli_parser.output_path
+        cmd = (
+            "tar -xvf "
+            + shlex.quote(tar_package)
+            + " -C "
+            + shlex.quote(self.__cli_parser.output_path)
+        )
         log.debug(Highlight.Convert("tar") + " by command " + cmd)
 
         if ShellRunner.command_run(cmd) != 0:
@@ -410,7 +418,7 @@ class LogTools:
             )
             return -1
 
-        cmd = "chmod -R 755" + " " + self.__cli_parser.output_path
+        cmd = "chmod -R 755" + " " + shlex.quote(self.__cli_parser.output_path)
         if ShellRunner.command_run(cmd) != 0:
             log.error(
                 Highlight.Convert(f"Run command failed: {cmd}", Highlight.RED),
