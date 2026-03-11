@@ -43,9 +43,6 @@ from pathlib import Path
 from typing import Dict, List, Set, Tuple, Optional
 
 
-# ============ Common Utility Functions ============
-
-
 def format_size(size_bytes: int) -> str:
     """Format file size in human-readable format"""
     size = float(size_bytes)
@@ -1107,11 +1104,11 @@ Examples:
   # Find duplicate files (default mode)
   %(prog)s -d ./res -e bin
   %(prog)s -d ./res -e bin --action delete
-  
+
   # Find unused resources
   %(prog)s --mode unused -c ./apps -r ./res
   %(prog)s --mode unused -c ./apps -r ./res --prefix "/resource/app:"
-  
+
   # Run both checks
   %(prog)s --mode both -d ./res -c ./apps -r ./res -e bin
 
@@ -1178,7 +1175,9 @@ Mode Description:
         action="extend",
         nargs="+",
         metavar="PREFIX",
-        help="File name prefix to scan (e.g., --prefix theme_ config_) OR path prefix mapping for unused mode (format: code_prefix:resource_prefix)",
+        help="File name prefix to scan (e.g., --prefix theme_ config_) "
+        "OR path prefix mapping for unused mode "
+        "(format: code_prefix:resource_prefix)",
     )
     parser.add_argument(
         "-a",
@@ -1205,7 +1204,9 @@ Mode Description:
         "--code-ext",
         metavar="EXTS",
         default=".c,.h,.cpp,.hpp,.cc,.cxx,.py,.java,.js,.ts,.json",
-        help="Code file extensions to scan for references (comma-separated, default: .c,.h,.cpp,.hpp,.cc,.cxx,.py,.java,.js,.ts,.json)",
+        help="Code file extensions to scan for references "
+        "(comma-separated, default: .c,.h,.cpp,.hpp,.cc,.cxx,"
+        ".py,.java,.js,.ts,.json)",
     )
 
     args = parser.parse_args()
