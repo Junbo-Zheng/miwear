@@ -355,7 +355,7 @@ Prefix Mapping:
         "--ext",
         metavar="EXTS",
         default=".c,.h,.cpp,.hpp,.cc,.cxx,.py,.java,.js,.ts,.json",
-        help="Code file extensions to scan (comma-separated, default: .c,.h,.cpp,.hpp,.cc,.cxx,.py,.java,.js,.ts,.json)",
+        help="Code file extensions to scan (comma-separated, default: .c,.h,.cpp,.hpp,.cc,.cxx,.py,.java,.json)",
     )
 
     args = parser.parse_args()
