@@ -379,6 +379,13 @@ def generate_dup_report(
 
 # ============ Unused Resources Functions ============
 
+# Conservative matching: require filename stem to appear in a
+# string-literal context (quoted, path-separated, or as a format
+# pattern).  Short stems (<=3 chars) demand stricter evidence to
+# avoid false positives from common variable/function names.
+
+MIN_STEM_LENGTH_FOR_LOOSE_MATCH = 4
+
 
 def scan_bin_files(
     resource_path: str, ignore_dirs: Set[str]
@@ -408,90 +415,128 @@ def scan_bin_files(
     return bin_files
 
 
-def scan_code_references(
-    code_path: str, ignore_dirs: Set[str], file_extensions: Set[str]
-) -> Set[str]:
-    """Scan code files for .bin file references"""
-    references: Set[str] = set()
+def _is_referenced_in_content(stem: str, content: str) -> bool:
+    """Check if a resource file stem is referenced in code content.
+
+    Uses conservative matching strategy:
+    - High confidence: "stem.bin", '/stem', stem.bin in any quote context
+    - Medium confidence: /stem%, "stem" in quotes, stem as path component
+    - Short stems (<=3 chars): require exact quoted or path match
+    - Numbered stems (e.g. anim0): also try base name with format specifier
+    """
+
+    # High confidence: exact filename with .bin extension
+    if f"{stem}.bin" in content:
+        return True
+
+    # High confidence: path separator + stem (e.g. /reminder, /fail)
+    if f"/{stem}" in content:
+        return True
+
+    # Medium confidence: quoted stem (e.g. "reminder", 'fail')
+    if f'"{stem}"' in content or f"'{stem}'" in content:
+        return True
+
+    # Numbered stem: anim0 -> check for "anim%d", "anim%s", "anim%02d" etc.
+    # Strips trailing digits: anim0->anim, frame01->frame, icon123->icon
+    base_stem = re.sub(r"\d+$", "", stem)
+    if base_stem and base_stem != stem:
+        if re.search(rf'["\'/]{re.escape(base_stem)}%[dsx0-9]', content):
+            return True
+
+    # Short stems need stricter matching - stop here
+    if len(stem) < MIN_STEM_LENGTH_FOR_LOOSE_MATCH:
+        return False
+
+    # Medium confidence: stem followed by format specifier
+    # Catches: "anim%d.bin", "icon%s", "frame%02d"
+    if re.search(rf'"{re.escape(stem)}%[dsx0-9]', content):
+        return True
+
+    # Medium confidence: stem in a string with .bin nearby
+    # Catches: snprintf(path, "%s/fail.%s", dir, "bin")
+    if (
+        re.search(rf'["\'][^"\']*{re.escape(stem)}[^"\']*["\']', content)
+        and ".bin" in content
+    ):
+        return True
+
+    return False
+
+
+def find_unused_resources(
+    bin_files: Dict[str, Tuple[str, int]],
+    code_path: str,
+    ignore_dirs: Set[str],
+    file_extensions: Set[str],
+) -> Tuple[Dict[str, Tuple[str, int]], Dict[str, str]]:
+    """Find unused resources using conservative filename-based matching.
+
+    For each .bin resource file, extract the stem (filename without .bin)
+    and search code files for references to that stem in string-literal
+    contexts.
+    """
+
+    # Build stem -> [resource_paths] mapping
+    stem_to_paths: Dict[str, List[str]] = defaultdict(list)
+    for bin_path in bin_files:
+        basename = os.path.basename(bin_path)
+        stem = os.path.splitext(basename)[0]
+        stem_to_paths[stem].append(bin_path)
+
+    referenced_files: Set[str] = set()
+    match_details: Dict[str, str] = {}
+    unmatched_stems = set(stem_to_paths.keys())
+
     root = Path(code_path).resolve()
-
     print(f"Scanning code directory: {root}")
-
-    bin_pattern = re.compile(r'["\']([^"\']*\.bin)["\']')
 
     file_count = 0
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames if d not in ignore_dirs]
 
-        for filename in filenames:
-            ext = os.path.splitext(filename)[1].lower()
-            if ext in file_extensions:
-                filepath = os.path.join(dirpath, filename)
-                file_count += 1
-
-                if file_count % 100 == 0:
-                    print(f"Scanned {file_count} code files...", end="\r")
-
-                try:
-                    with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
-                        content = f.read()
-                        matches = bin_pattern.findall(content)
-                        for match in matches:
-                            references.add(match)
-                except (IOError, OSError):
-                    pass
-
-    print(
-        f"Scanned {file_count} code files, found {len(references)} unique .bin references"
-        + " " * 20
-    )
-    return references
-
-
-def normalize_path(path: str, prefix_mappings: List[Tuple[str, str]]) -> str:
-    """Normalize path reference from code to match resource file path"""
-    path = path.strip("/")
-
-    for code_prefix, res_prefix in prefix_mappings:
-        if path.startswith(code_prefix.strip("/")):
-            path = path.replace(code_prefix.strip("/"), res_prefix.strip("/"), 1)
+        if not unmatched_stems:
             break
 
-    return path
+        for filename in filenames:
+            ext = os.path.splitext(filename)[1].lower()
+            if ext not in file_extensions:
+                continue
 
+            filepath = os.path.join(dirpath, filename)
+            file_count += 1
 
-def find_unused_resources(
-    bin_files: Dict[str, Tuple[str, int]],
-    code_references: Set[str],
-    prefix_mappings: List[Tuple[str, str]],
-) -> Tuple[Dict[str, Tuple[str, int]], Dict[str, List[str]]]:
-    """Find unused resources"""
-    referenced_files: Set[str] = set()
-    matched_references: Dict[str, List[str]] = defaultdict(list)
+            if file_count % 100 == 0:
+                print(f"Scanned {file_count} code files...", end="\r")
 
-    bin_filenames: Dict[str, List[str]] = defaultdict(list)
-    for bin_path in bin_files:
-        filename = os.path.basename(bin_path)
-        bin_filenames[filename].append(bin_path)
+            try:
+                with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
+                    content = f.read()
+            except (IOError, OSError):
+                continue
 
-    for ref in code_references:
-        normalized = normalize_path(ref, prefix_mappings)
-        ref_filename = os.path.basename(normalized)
+            newly_matched = []
+            for stem in unmatched_stems:
+                if _is_referenced_in_content(stem, content):
+                    for bin_path in stem_to_paths[stem]:
+                        referenced_files.add(bin_path)
+                    rel_code = os.path.relpath(filepath, root)
+                    match_details[stem] = rel_code
+                    newly_matched.append(stem)
 
-        if normalized in bin_files:
-            referenced_files.add(normalized)
-            matched_references[ref].append(normalized)
-        elif ref_filename in bin_filenames:
-            for bin_path in bin_filenames[ref_filename]:
-                if bin_path.endswith(normalized) or normalized in bin_path:
-                    referenced_files.add(bin_path)
-                    matched_references[ref].append(bin_path)
+            for stem in newly_matched:
+                unmatched_stems.discard(stem)
+
+    print(
+        f"Scanned {file_count} code files, matched {len(referenced_files)} "
+        f"resource files" + " " * 20
+    )
 
     unused_files = {
         path: info for path, info in bin_files.items() if path not in referenced_files
     }
 
-    return unused_files, dict(matched_references)
+    return unused_files, match_details
 
 
 def generate_unused_report(
@@ -704,11 +749,6 @@ def run_unused_mode(args):
 
     ignore_dirs = parse_ignore_dirs(args)
 
-    prefix_mappings: List[Tuple[str, str]] = []
-    if args.prefix:
-        for p in args.prefix:
-            prefix_mappings.append(parse_prefix_mapping(p))
-
     file_extensions: Set[str] = set(
         ext.strip() if ext.strip().startswith(".") else f".{ext.strip()}"
         for ext in args.code_ext.split(",")
@@ -722,12 +762,9 @@ def run_unused_mode(args):
     bin_files = scan_bin_files(args.resource, ignore_dirs)
 
     print()
-    code_references = scan_code_references(args.code, ignore_dirs, file_extensions)
-
-    print()
     print("Analyzing unused resources...")
     unused_files, matched = find_unused_resources(
-        bin_files, code_references, prefix_mappings
+        bin_files, args.code, ignore_dirs, file_extensions
     )
 
     print()
@@ -750,7 +787,7 @@ def run_unused_mode(args):
     print("=" * 60)
     print(f"Total resource files: {len(bin_files):,}")
     print(f"Total resource size: {format_size(total_size)}")
-    print(f"Code references found: {len(code_references):,}")
+    print(f"Matched resources: {len(bin_files) - len(unused_files):,}")
     print(f"Unused files: {len(unused_files):,}")
 
     if unused_files:
@@ -825,11 +862,6 @@ def run_both_mode(args):
                 file=sys.stderr,
             )
         else:
-            prefix_mappings: List[Tuple[str, str]] = []
-            if args.prefix:
-                for p in args.prefix:
-                    prefix_mappings.append(parse_prefix_mapping(p))
-
             file_extensions: Set[str] = set(
                 ext.strip() if ext.strip().startswith(".") else f".{ext.strip()}"
                 for ext in args.code_ext.split(",")
@@ -837,13 +869,9 @@ def run_both_mode(args):
 
             bin_files = scan_bin_files(args.resource, ignore_dirs)
             print()
-            code_references = scan_code_references(
-                args.code, ignore_dirs, file_extensions
-            )
-            print()
             print("Analyzing unused resources...")
             unused_files, matched = find_unused_resources(
-                bin_files, code_references, prefix_mappings
+                bin_files, args.code, ignore_dirs, file_extensions
             )
 
             if unused_files:
