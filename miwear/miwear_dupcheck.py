@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """
-Duplicate .bin File Finder
-Scan specified path for all .bin files, find duplicates and generate report
+Duplicate File Finder (Generic)
+Scan specified path for duplicate files by extension or prefix, and generate report
 
 Usage:
-    python bincheck.py [PATH] [--ignore DIR1,DIR2] [--output REPORT.md]
-    python bincheck.py . --ignore watchface,watchface_gl
-    python bincheck.py /path/to/res --output duplicate_report.md
+    python miwear_dupcheck.py [PATH] [--ext EXT1,EXT2] [--prefix PREFIX1,PREFIX2]
+    python miwear_dupcheck.py . --ext .bin,.png
+    python miwear_dupcheck.py /path/to/res --ext .json --prefix config_
+    python miwear_dupcheck.py . --output duplicate_report.md
 """
 
 import argparse
@@ -41,8 +42,41 @@ def format_size(size_bytes: int) -> str:
     return f"{size:.2f} TB"
 
 
-def scan_bin_files(
-    root_path: str, ignore_dirs: Set[str]
+def should_include_file(
+    filename: str, extensions: Set[str], prefixes: Set[str]
+) -> bool:
+    """Check if file should be included based on extension and/or prefix"""
+
+    has_ext_match = not extensions
+    has_prefix_match = not prefixes
+
+    if extensions:
+        for ext in extensions:
+            if filename.endswith(ext):
+                has_ext_match = True
+                break
+
+    if prefixes:
+        for prefix in prefixes:
+            if filename.startswith(prefix):
+                has_prefix_match = True
+                break
+
+    if extensions and prefixes:
+        return has_ext_match and has_prefix_match
+    elif extensions:
+        return has_ext_match
+    elif prefixes:
+        return has_prefix_match
+    else:
+        return True
+
+
+def scan_files(
+    root_path: str,
+    ignore_dirs: Set[str],
+    extensions: Set[str],
+    prefixes: Set[str],
 ) -> Tuple[Dict[str, List[Tuple[str, int]]], int, int]:
     hash_to_files: Dict[str, List[Tuple[str, int]]] = defaultdict(list)
     total_files = 0
@@ -53,13 +87,21 @@ def scan_bin_files(
     print(f"Scanning directory: {root}")
     if ignore_dirs:
         print(f"Ignoring directories: {', '.join(sorted(ignore_dirs))}")
+
+    filter_info = []
+    if extensions:
+        filter_info.append(f"extensions: {', '.join(sorted(extensions))}")
+    if prefixes:
+        filter_info.append(f"prefixes: {', '.join(sorted(prefixes))}")
+    if filter_info:
+        print(f"Filtering by {', '.join(filter_info)}")
     print()
 
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames if d not in ignore_dirs]
 
         for filename in filenames:
-            if filename.endswith(".bin"):
+            if should_include_file(filename, extensions, prefixes):
                 filepath = os.path.join(dirpath, filename)
                 total_files += 1
 
@@ -82,7 +124,13 @@ def scan_bin_files(
                         file=sys.stderr,
                     )
 
-    print(f"Scan complete! Found {total_files} .bin files" + " " * 20)
+    filter_desc = "filtered files"
+    if extensions:
+        filter_desc += f" with extensions {', '.join(extensions)}"
+    if prefixes:
+        filter_desc += f" with prefixes {', '.join(prefixes)}"
+
+    print(f"Scan complete! Found {total_files} {filter_desc}" + " " * 20)
 
     return hash_to_files, total_files, total_size
 
@@ -107,11 +155,13 @@ def generate_report(
     total_size: int,
     root_path: str,
     ignore_dirs: Set[str],
+    extensions: Set[str],
+    prefixes: Set[str],
     output_file: Optional[str] = None,
 ) -> str:
     lines = []
 
-    lines.append("# Duplicate .bin File Report")
+    lines.append("# Duplicate File Report")
     lines.append("")
     lines.append(f"**Generated**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     lines.append(f"**Scanned Path**: `{root_path}`")
@@ -120,6 +170,11 @@ def generate_report(
         lines.append(
             f"**Ignored Directories**: {', '.join(f'`{d}`' for d in sorted(ignore_dirs))}"
         )
+
+    if extensions:
+        lines.append(f"**File Extensions**: {', '.join(sorted(extensions))}")
+    if prefixes:
+        lines.append(f"**File Prefixes**: {', '.join(sorted(prefixes))}")
 
     lines.append("")
     lines.append("---")
@@ -237,15 +292,23 @@ def generate_report(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Scan and find duplicate .bin files",
+        description="Scan and find duplicate files by extension or prefix",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  %(prog)s                                    # Scan current directory
-  %(prog)s /path/to/res                       # Scan specified directory
-  %(prog)s . --ignore watchface,watchface_gl  # Ignore specific directories
-  %(prog)s . --output report.md               # Specify output filename
-  %(prog)s . --ignore-dir watchface           # Use long option to ignore directory
+  %(prog)s                                          # Scan all files in current directory
+  %(prog)s --ext .bin                               # Scan only .bin files
+  %(prog)s --ext .bin,.png                           # Scan .bin and .png files
+  %(prog)s --prefix config_                            # Scan files starting with config_
+  %(prog)s --ext .bin --prefix theme_                  # Scan .bin files starting with theme_
+  %(prog)s /path/to/res --ext .json --output report.md
+  %(prog)s . --ignore watchface,watchface_gl --ext .bin
+
+Filtering Rules:
+  - No --ext and no --prefix: Scan ALL files (default)
+  - Only --ext specified: Scan files with ANY of the specified extensions (OR)
+  - Only --prefix specified: Scan files with ANY of the specified prefixes (OR)
+  - Both --ext and --prefix: Scan files matching BOTH extension AND prefix (AND)
         """,
     )
 
@@ -254,6 +317,22 @@ Examples:
         nargs="?",
         default=".",
         help="Root directory to scan (default: current directory)",
+    )
+
+    parser.add_argument(
+        "-e",
+        "--ext",
+        action="append",
+        metavar="EXT",
+        help="File extension to scan (can be used multiple times, e.g., --ext .bin --ext .png)",
+    )
+
+    parser.add_argument(
+        "-p",
+        "--prefix",
+        action="append",
+        metavar="PREFIX",
+        help="File name prefix to scan (can be used multiple times, e.g., --prefix theme_ --prefix config_)",
     )
 
     parser.add_argument(
@@ -274,8 +353,8 @@ Examples:
         "-o",
         "--output",
         metavar="FILE",
-        default="duplicate_bins_report.md",
-        help="Output report filename (default: duplicate_bins_report.md)",
+        default="duplicate_files_report.md",
+        help="Output report filename (default: duplicate_files_report.md)",
     )
 
     parser.add_argument(
@@ -301,12 +380,25 @@ Examples:
     if args.ignore_dir:
         ignore_dirs.update(args.ignore_dir)
 
+    extensions: Set[str] = set()
+    if args.ext:
+        extensions.update(
+            ext.strip() if ext.strip().startswith(".") else f".{ext.strip()}"
+            for ext in args.ext
+        )
+
+    prefixes: Set[str] = set()
+    if args.prefix:
+        prefixes.update(prefix.strip() for prefix in args.prefix if prefix.strip())
+
     print("=" * 60)
-    print("Duplicate .bin File Detector")
+    print("Duplicate File Detector")
     print("=" * 60)
     print()
 
-    hash_to_files, total_files, total_size = scan_bin_files(args.path, ignore_dirs)
+    hash_to_files, total_files, total_size = scan_files(
+        args.path, ignore_dirs, extensions, prefixes
+    )
 
     print("\nAnalyzing duplicate files...")
     duplicates = find_duplicates(hash_to_files)
@@ -319,6 +411,8 @@ Examples:
         total_size,
         os.path.abspath(args.path),
         ignore_dirs,
+        extensions,
+        prefixes,
         output_file,
     )
 
