@@ -1116,6 +1116,7 @@ Mode Description:
 
     # Mode selection
     parser.add_argument(
+        "-m",
         "--mode",
         choices=["dup", "unused", "both"],
         default="dup",
