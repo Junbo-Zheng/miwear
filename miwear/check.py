@@ -433,10 +433,16 @@ def _is_referenced_in_content(stem: str, content: str) -> bool:
     if f'"{stem}"' in content or f"'{stem}'" in content:
         return True
 
-    # Numbered stem: anim0 -> check for "anim%d", "anim%s", "anim%02d" etc.
-    # Strips trailing digits: anim0->anim, frame01->frame, icon123->icon
+    # Numbered stem: Measuring45 -> base_stem "Measuring"
+    # Matches: "Measuring%d", "Measuring%02d", "/Measuring", '"Measuring"'
+    # Covers both format-string patterns and prefix_name/suffix_name patterns
+    # like: dsc.prefix_name = "/path/Measuring"; dsc.suffix_name = ".bin";
     base_stem = re.sub(r"\d+$", "", stem)
     if base_stem and base_stem != stem:
+        if f"/{base_stem}" in content:
+            return True
+        if f'"{base_stem}"' in content or f"'{base_stem}'" in content:
+            return True
         if re.search(rf'["\'/]{re.escape(base_stem)}%[dsx0-9]', content):
             return True
 
@@ -479,7 +485,10 @@ def find_unused_resources(
     stem_to_base: Dict[str, str] = {}
     for bin_path in bin_files:
         basename = os.path.basename(bin_path)
-        stem = os.path.splitext(basename)[0]
+        raw_stem = os.path.splitext(basename)[0]
+        stem = raw_stem.strip("_ \t0123456789")
+        if not stem:
+            stem = raw_stem
         stem_to_paths[stem].append(bin_path)
         base = re.sub(r"\d+$", "", stem)
         if base and base != stem:
