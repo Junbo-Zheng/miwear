@@ -54,11 +54,24 @@ class DefaultCLIParameters:
 
 
 class ShellRunner:
+    last_error = ""  # store last command error output
+
     @staticmethod
     def command_run(command):
-        return subprocess.run(
-            command, stdin=sys.stdin, stdout=sys.stdout, shell=True
-        ).returncode
+        result = subprocess.run(
+            command,
+            stdin=sys.stdin,
+            stdout=sys.stdout,
+            stderr=subprocess.PIPE,
+            shell=True,
+        )
+        if result.returncode != 0 and result.stderr:
+            ShellRunner.last_error = result.stderr.decode(
+                "utf-8", errors="replace"
+            ).strip()
+        else:
+            ShellRunner.last_error = ""
+        return result.returncode
 
 
 class CLIParametersParser:
@@ -257,9 +270,9 @@ class LogTools:
         if len(result) == 0:
             log.error(
                 Highlight.Convert(
-                    "Not found file packet, please check source path", Highlight.RED
-                ),
-                stack_info=True,
+                    f"Not found file packet, please check source path: {self.__cli_parser.source_path}",
+                    Highlight.RED,
+                )
             )
             return -1
 
@@ -299,8 +312,7 @@ class LogTools:
             shutil.copyfile(file, output)
         if output is None:
             log.error(
-                Highlight.Convert("not found file packet", Highlight.RED),
-                stack_info=True,
+                Highlight.Convert(f"Not found file packet in {file}", Highlight.RED)
             )
             return -1
 
@@ -338,9 +350,8 @@ class LogTools:
         if not os.path.exists(self.log_dir_path):
             log.error(
                 Highlight.Convert(
-                    f"Not found log directory {self.log_dir_path}", Highlight.RED
-                ),
-                stack_info=True,
+                    f"Not found log directory: {self.log_dir_path}", Highlight.RED
+                )
             )
             return -1
 
@@ -412,17 +423,23 @@ class LogTools:
         log.debug(Highlight.Convert("tar") + " by command " + cmd)
 
         if ShellRunner.command_run(cmd) != 0:
+            error_msg = ShellRunner.last_error or "unknown error"
             log.error(
-                Highlight.Convert(f"Run command failed: {cmd}", Highlight.RED),
-                stack_info=True,
+                Highlight.Convert(
+                    f"Command failed:\n  Command: {cmd}\n  Error: {error_msg}",
+                    Highlight.RED,
+                )
             )
             return -1
 
         cmd = "chmod -R 755" + " " + shlex.quote(self.__cli_parser.output_path)
         if ShellRunner.command_run(cmd) != 0:
+            error_msg = ShellRunner.last_error or "unknown error"
             log.error(
-                Highlight.Convert(f"Run command failed: {cmd}", Highlight.RED),
-                stack_info=True,
+                Highlight.Convert(
+                    f"Command failed:\n  Command: {cmd}\n  Error: {error_msg}",
+                    Highlight.RED,
+                )
             )
             return -1
 
@@ -538,7 +555,9 @@ class LogTools:
 
 def CHECK_ERROR_EXIT(ret):
     if ret:
-        log.error(Highlight.Convert("failure", Highlight.RED), stack_info=True)
+        log.error(
+            Highlight.Convert("Extraction failed with code: " + str(ret), Highlight.RED)
+        )
         exit(ret)
 
 
