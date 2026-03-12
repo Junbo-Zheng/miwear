@@ -6,10 +6,13 @@ A comprehensive Python Miwear toolkit to extract and process archive log files.
 
 - Supports batch extraction of `.tar.gz` , `.zip` and `.gz` files.
 - Command-line tools for log processing, validation, merging and unzipping.
+- Resource check tool for finding duplicate files and unused resources.
 - Serial command sender for interacting with serial devices (requires `pyserial`).
+- YMODEM file transfer over serial port (requires `pyserial`).
 - Designed for automation and integration into your workflow.
-- No external dependencies for log processing tools (pure Python standard libraries).
-- `pyserial` required for serial communication functionality.
+- Requires Python >= 3.10.
+- No external dependencies for log processing and resource check tools (pure Python standard libraries).
+- `pyserial` required for serial communication and YMODEM functionality.
 
 ## Installation
 
@@ -43,6 +46,8 @@ After installation, you get several standalone CLI tools:
 - `miwear_tz` : Specialized extraction for `.tar.gz`.
 - `miwear_uz` : Versatile archive decompression utility.
 - `miwear_serial` : Serial command sender for interacting with serial devices (requires `pyserial`).
+- `miwear_ymodem` : YMODEM file transfer over serial port (requires `pyserial`).
+- `miwear_check` : Resource check tool for finding duplicate files and unused resources.
 
 ## Usage Examples
 
@@ -90,7 +95,47 @@ miwear_tz --path ./logs
 miwear_uz --path ./logs
 ```
 
-### 6. Serial Command Sender
+### 6. Resource Check Tool
+
+**Find duplicate files (default mode):**
+
+```bash
+miwear_check -d ./res -e bin
+```
+
+**Find duplicate files and delete duplicates:**
+
+```bash
+miwear_check -d ./res -e bin --action delete
+```
+
+**Find unused resources:**
+
+```bash
+miwear_check -m unused -c ./apps -d ./res
+```
+
+**Find unused resources with path prefix mapping:**
+
+```bash
+miwear_check -m unused -c ./apps -d ./res --prefix "/resource/app:"
+```
+
+**Run both checks (duplicate + unused):**
+
+```bash
+miwear_check -m both -d ./res -c ./apps -e bin
+```
+
+### 7. YMODEM File Transfer
+
+Transfer a file via YMODEM over serial port:
+
+```bash
+miwear_ymodem -p /dev/ttyACM0 -b 921600 -f firmware.bin
+```
+
+### 8. Serial Command Sender
 
 The `miwear_serial` tool requires the `pyserial` library. Install it with:
 
