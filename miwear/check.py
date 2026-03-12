@@ -414,49 +414,71 @@ def scan_bin_files(
 def _is_referenced_in_content(stem: str, content: str) -> bool:
     """Check if a resource file stem is referenced in code content.
 
-    Uses conservative matching strategy:
-    - High confidence: "stem.bin", '/stem', stem.bin in any quote context
-    - Medium confidence: /stem%, "stem" in quotes, stem as path component
-    - Short stems (<=3 chars): require exact quoted or path match
-    - Numbered stems (e.g. anim0): also try base name with format specifier
+    Uses conservative matching strategy with multiple confidence levels.
+    Matching rules are ordered from high to low confidence, returns True
+    on first hit.
+
+    Args:
+        stem: resource filename without .bin extension (e.g. "reminder",
+              "anim0", "findphone_23")
+        content: full text content of a code file
     """
 
-    # High confidence: exact filename with .bin extension
+    # Rule 1 [HIGH]: exact "stem.bin" substring
+    # e.g. code has: lv_img_set_src(img, "/res/reminder.bin");
     if f"{stem}.bin" in content:
         return True
 
-    # High confidence: path separator + stem (e.g. /reminder, /fail)
+    # Rule 2 [HIGH]: path separator before stem: "/stem"
+    # e.g. code has: #define IMG OTA_PATH "/reminder"
     if f"/{stem}" in content:
         return True
 
-    # Medium confidence: quoted stem (e.g. "reminder", 'fail')
+    # Rule 3 [MEDIUM]: stem wrapped in quotes: "stem" or 'stem'
+    # e.g. code has: dsc.name = "reminder";
     if f'"{stem}"' in content or f"'{stem}'" in content:
         return True
 
-    # Numbered stem: Measuring45 -> base_stem "Measuring"
-    # Matches: "Measuring%d", "Measuring%02d", "/Measuring", '"Measuring"'
-    # Covers both format-string patterns and prefix_name/suffix_name patterns
-    # like: dsc.prefix_name = "/path/Measuring"; dsc.suffix_name = ".bin";
+    # Rule 4-7: numbered file handling
+    # For files like anim0.bin, Measuring45.bin, findphone_23.bin,
+    # strip trailing digits to get base_stem (anim, Measuring,
+    # findphone_), then try matching with base_stem
     base_stem = re.sub(r"\d+$", "", stem)
     if base_stem and base_stem != stem:
+        # Rule 4 [MEDIUM]: path separator before base_stem: "/base_stem"
+        # e.g. code has: prefix_name = MAKE_PATH("/measure/Measuring");
         if f"/{base_stem}" in content:
             return True
+
+        # Rule 5 [MEDIUM]: base_stem wrapped in quotes
+        # e.g. code has: dsc.prefix = "Measuring";
         if f'"{base_stem}"' in content or f"'{base_stem}'" in content:
             return True
+
+        # Rule 6 [MEDIUM]: base_stem followed by format specifier
+        # e.g. code has: snprintf(path, "%s/anim%d.bin", dir, idx);
         if re.search(rf'["\'/]{re.escape(base_stem)}%[dsx0-9]', content):
             return True
 
-    # Short stems need stricter matching - stop here
+        # Rule 7 [MEDIUM]: base_stem as standalone word (len >= 4)
+        # e.g. code has: APP_ANIM_PATH(findphone_)
+        #      or:       #define PREFIX findphone_
+        if len(base_stem) >= 4 and re.search(rf"\b{re.escape(base_stem)}\b", content):
+            return True
+
+    # Short stems (<=3 chars like "ab", "ok") are too common as
+    # variable/function names, stop here to avoid false positives
     if len(stem) < MIN_STEM_LENGTH_FOR_LOOSE_MATCH:
         return False
 
-    # Medium confidence: stem followed by format specifier
-    # Catches: "anim%d.bin", "icon%s", "frame%02d"
+    # Rule 8 [LOW]: stem followed by format specifier
+    # e.g. code has: snprintf(path, "icon%s", suffix);
     if re.search(rf'"{re.escape(stem)}%[dsx0-9]', content):
         return True
 
-    # Medium confidence: stem in a string with .bin nearby
-    # Catches: snprintf(path, "%s/fail.%s", dir, "bin")
+    # Rule 9 [LOW]: stem inside any quoted string AND ".bin" exists
+    # in the same file. Catches split-suffix patterns like:
+    # snprintf(path, "%s/fail.%s", dir, "bin");
     if (
         re.search(rf'["\'][^"\']*{re.escape(stem)}[^"\']*["\']', content)
         and ".bin" in content
