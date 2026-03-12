@@ -128,14 +128,7 @@ def should_include_file(
                 has_prefix_match = True
                 break
 
-    if extensions and prefixes:
-        return has_ext_match and has_prefix_match
-    elif extensions:
-        return has_ext_match
-    elif prefixes:
-        return has_prefix_match
-    else:
-        return True
+    return has_ext_match and has_prefix_match
 
 
 def scan_files_for_duplicates(
@@ -144,8 +137,12 @@ def scan_files_for_duplicates(
     extensions: Set[str],
     prefixes: Set[str],
 ) -> Tuple[Dict[str, List[Tuple[str, int]]], int, int]:
-    """Scan files and calculate hash values"""
-    hash_to_files: Dict[str, List[Tuple[str, int]]] = defaultdict(list)
+    """Scan files and calculate hash values.
+
+    Uses a size-based pre-filter: only files sharing the same size are
+    hashed, because files with unique sizes cannot be duplicates.
+    """
+    size_to_files: Dict[int, List[Tuple[str, str]]] = defaultdict(list)
     total_files = 0
     total_size = 0
     root = Path(root_path).resolve()
@@ -163,6 +160,7 @@ def scan_files_for_duplicates(
         print(f"Filtering by {', '.join(filter_info)}")
     print()
 
+    # Phase 1: collect files grouped by size
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames if d not in ignore_dirs]
 
@@ -172,21 +170,30 @@ def scan_files_for_duplicates(
                 total_files += 1
 
                 if total_files % 500 == 0:
-                    print(f"Scanned {total_files} files...", end="\r")
+                    print(f"Scanned {total_files} files...", end="\r", flush=True)
 
                 try:
                     file_size = os.path.getsize(filepath)
                     total_size += file_size
-                    file_hash = calculate_file_hash(filepath)
-
-                    if file_hash:
-                        rel_path = os.path.relpath(filepath, root)
-                        hash_to_files[file_hash].append((rel_path, file_size))
+                    rel_path = os.path.relpath(filepath, root)
+                    size_to_files[file_size].append((rel_path, filepath))
                 except OSError as e:
                     print(
                         f"\nWarning: Unable to access file {filepath}: {e}",
                         file=sys.stderr,
                     )
+
+    # Phase 2: only hash files whose size appears more than once
+    hash_to_files: Dict[str, List[Tuple[str, int]]] = defaultdict(list)
+    hashed_count = 0
+    for file_size, files in size_to_files.items():
+        if len(files) < 2:
+            continue
+        for rel_path, filepath in files:
+            file_hash = calculate_file_hash(filepath)
+            if file_hash:
+                hash_to_files[file_hash].append((rel_path, file_size))
+            hashed_count += 1
 
     filter_desc = "filtered files"
     if extensions:
@@ -194,7 +201,8 @@ def scan_files_for_duplicates(
     if prefixes:
         filter_desc += f" with prefixes {', '.join(prefixes)}"
 
-    print(f"Scan complete! Found {total_files} {filter_desc}" + " " * 20)
+    print(f"Scan complete! Found {total_files} {filter_desc}, "
+          f"hashed {hashed_count} candidates" + " " * 20)
     return hash_to_files, total_files, total_size
 
 
@@ -247,7 +255,7 @@ def generate_dup_report(
     ignore_dirs: Set[str],
     extensions: Set[str],
     prefixes: Set[str],
-    output_file: str | None = None,
+    output_file: Optional[str] = None,
 ) -> str:
     """Generate duplicate files report"""
     lines = []
@@ -539,7 +547,7 @@ def find_unused_resources(
             file_count += 1
 
             if file_count % 100 == 0:
-                print(f"Scanned {file_count} code files...", end="\r")
+                print(f"Scanned {file_count} code files...", end="\r", flush=True)
 
             try:
                 with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
@@ -705,14 +713,6 @@ def generate_unused_report(
         print(f"\nReport saved to: {output_file}")
 
     return report
-
-
-def parse_prefix_mapping(mapping_str: str) -> Tuple[str, str]:
-    """Parse prefix mapping string like '/resource/app:/rgb888/app'"""
-    parts = mapping_str.split(":", 1)
-    if len(parts) == 2:
-        return parts[0].strip(), parts[1].strip()
-    return mapping_str.strip(), ""
 
 
 # ============ Mode Execution Functions ============
