@@ -201,8 +201,10 @@ def scan_files_for_duplicates(
     if prefixes:
         filter_desc += f" with prefixes {', '.join(prefixes)}"
 
-    print(f"Scan complete! Found {total_files} {filter_desc}, "
-          f"hashed {hashed_count} candidates" + " " * 20)
+    print(
+        f"Scan complete! Found {total_files} {filter_desc}, "
+        f"hashed {hashed_count} candidates" + " " * 20
+    )
     return hash_to_files, total_files, total_size
 
 
@@ -417,13 +419,13 @@ def scan_resource_files(
                         f"Warning: Cannot access file {filepath}: {e}", file=sys.stderr
                     )
 
-    print(f"Found {len(resource_files)} resource files ({ext_desc}) in resource directory")
+    print(
+        f"Found {len(resource_files)} resource files ({ext_desc}) in resource directory"
+    )
     return resource_files
 
 
-def _is_referenced_in_content(
-    stem: str, content: str, resource_exts: Set[str]
-) -> bool:
+def _is_referenced_in_content(stem: str, content: str, resource_exts: Set[str]) -> bool:
     """Check if a resource file stem is referenced in code content.
 
     Uses conservative matching strategy with multiple confidence levels.
@@ -493,9 +495,8 @@ def _is_referenced_in_content(
     # Rule 9 [LOW]: stem inside any quoted string AND resource extension
     # exists in the same file. Catches split-suffix patterns like:
     # snprintf(path, "%s/fail.%s", dir, "bin");
-    if (
-        re.search(rf'["\'][^"\']*{re.escape(stem)}[^"\']*["\']', content)
-        and any(ext in content for ext in resource_exts)
+    if re.search(rf'["\'][^"\']*{re.escape(stem)}[^"\']*["\']', content) and any(
+        ext in content for ext in resource_exts
     ):
         return True
 
