@@ -392,12 +392,13 @@ def generate_dup_report(
 MIN_STEM_LENGTH_FOR_LOOSE_MATCH = 4
 
 
-def scan_bin_files(
-    resource_path: str, ignore_dirs: Set[str]
+def scan_resource_files(
+    resource_path: str, ignore_dirs: Set[str], extensions: Set[str]
 ) -> Dict[str, Tuple[str, int]]:
-    """Scan all .bin files in resource directory"""
-    bin_files: Dict[str, Tuple[str, int]] = {}
+    """Scan resource files with specified extensions in resource directory"""
+    resource_files: Dict[str, Tuple[str, int]] = {}
     root = Path(resource_path).resolve()
+    ext_desc = ", ".join(sorted(extensions))
 
     print(f"Scanning resource directory: {root}")
 
@@ -405,22 +406,24 @@ def scan_bin_files(
         dirnames[:] = [d for d in dirnames if d not in ignore_dirs]
 
         for filename in filenames:
-            if filename.endswith(".bin"):
+            if any(filename.endswith(ext) for ext in extensions):
                 filepath = os.path.join(dirpath, filename)
                 try:
                     file_size = os.path.getsize(filepath)
                     rel_path = os.path.relpath(filepath, root)
-                    bin_files[rel_path] = (filepath, file_size)
+                    resource_files[rel_path] = (filepath, file_size)
                 except OSError as e:
                     print(
                         f"Warning: Cannot access file {filepath}: {e}", file=sys.stderr
                     )
 
-    print(f"Found {len(bin_files)} .bin files in resource directory")
-    return bin_files
+    print(f"Found {len(resource_files)} resource files ({ext_desc}) in resource directory")
+    return resource_files
 
 
-def _is_referenced_in_content(stem: str, content: str) -> bool:
+def _is_referenced_in_content(
+    stem: str, content: str, resource_exts: Set[str]
+) -> bool:
     """Check if a resource file stem is referenced in code content.
 
     Uses conservative matching strategy with multiple confidence levels.
@@ -428,15 +431,17 @@ def _is_referenced_in_content(stem: str, content: str) -> bool:
     on first hit.
 
     Args:
-        stem: resource filename without .bin extension (e.g. "reminder",
+        stem: resource filename without extension (e.g. "reminder",
               "anim0", "findphone_23")
         content: full text content of a code file
+        resource_exts: set of resource file extensions (e.g. {".bin"})
     """
 
-    # Rule 1 [HIGH]: exact "stem.bin" substring
+    # Rule 1 [HIGH]: exact "stem.ext" substring
     # e.g. code has: lv_img_set_src(img, "/res/reminder.bin");
-    if f"{stem}.bin" in content:
-        return True
+    for ext in resource_exts:
+        if f"{stem}{ext}" in content:
+            return True
 
     # Rule 2 [HIGH]: path separator before stem: "/stem"
     # e.g. code has: #define IMG OTA_PATH "/reminder"
@@ -485,12 +490,12 @@ def _is_referenced_in_content(stem: str, content: str) -> bool:
     if re.search(rf'"{re.escape(stem)}%[dsx0-9]', content):
         return True
 
-    # Rule 9 [LOW]: stem inside any quoted string AND ".bin" exists
-    # in the same file. Catches split-suffix patterns like:
+    # Rule 9 [LOW]: stem inside any quoted string AND resource extension
+    # exists in the same file. Catches split-suffix patterns like:
     # snprintf(path, "%s/fail.%s", dir, "bin");
     if (
         re.search(rf'["\'][^"\']*{re.escape(stem)}[^"\']*["\']', content)
-        and ".bin" in content
+        and any(ext in content for ext in resource_exts)
     ):
         return True
 
@@ -502,10 +507,11 @@ def find_unused_resources(
     code_path: str,
     ignore_dirs: Set[str],
     file_extensions: Set[str],
+    resource_exts: Set[str],
 ) -> Tuple[Dict[str, Tuple[str, int]], Dict[str, str]]:
     """Find unused resources using conservative filename-based matching.
 
-    For each .bin resource file, extract the stem (filename without .bin)
+    For each resource file, extract the stem (filename without extension)
     and search code files for references to that stem in string-literal
     contexts.
     """
@@ -575,7 +581,7 @@ def find_unused_resources(
             newly_matched = []
             rel_code = os.path.relpath(filepath, root)
             for stem in candidates:
-                if _is_referenced_in_content(stem, content):
+                if _is_referenced_in_content(stem, content, resource_exts):
                     for bin_path in stem_to_paths[stem]:
                         referenced_files.add(bin_path)
                     match_details[stem] = rel_code
@@ -603,17 +609,20 @@ def generate_unused_report(
     code_path: str,
     resource_path: str,
     ignore_dirs: Set[str],
+    extensions: Set[str],
     output_file: Optional[str] = None,
 ) -> str:
     """Generate unused resources report"""
+    ext_desc = ", ".join(sorted(extensions))
     lines = []
 
-    lines.append("# Unused .bin Resource File Report")
+    lines.append(f"# Unused Resource File Report ({ext_desc})")
     lines.append("")
     lines.append(f"**Generated**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     lines.append(f"**Command**: `{' '.join(sys.argv)}`")
     lines.append(f"**Code Path**: `{code_path}`")
     lines.append(f"**Resource Path**: `{resource_path}`")
+    lines.append(f"**Resource Extensions**: {ext_desc}")
 
     if ignore_dirs:
         lines.append(
@@ -685,7 +694,7 @@ def generate_unused_report(
     lines.append("")
     lines.append("## 📋 Unused Files Detail")
     lines.append("")
-    lines.append(f"Found **{unused_count}** unused .bin files (sorted by size):")
+    lines.append(f"Found **{unused_count}** unused resource files (sorted by size):")
     lines.append("")
 
     for idx, (path, (_, size)) in enumerate(sorted_unused, 1):
@@ -798,23 +807,27 @@ def run_unused_mode(args):
         sys.exit(1)
 
     ignore_dirs = parse_ignore_dirs(args)
+    extensions = parse_extensions(args)
+    if not extensions:
+        extensions = {".bin"}
 
     file_extensions: Set[str] = set(
         ext.strip() if ext.strip().startswith(".") else f".{ext.strip()}"
         for ext in args.code_ext.split(",")
     )
 
+    ext_desc = ", ".join(sorted(extensions))
     print("=" * 60)
-    print("Unused .bin Resource File Detector")
+    print(f"Unused Resource File Detector ({ext_desc})")
     print("=" * 60)
     print()
 
-    bin_files = scan_bin_files(args.dir, ignore_dirs)
+    bin_files = scan_resource_files(args.dir, ignore_dirs, extensions)
 
     print()
     print("Analyzing unused resources...")
     unused_files, matched = find_unused_resources(
-        bin_files, args.code, ignore_dirs, file_extensions
+        bin_files, args.code, ignore_dirs, file_extensions, extensions
     )
 
     print()
@@ -828,6 +841,7 @@ def run_unused_mode(args):
         os.path.abspath(args.code),
         os.path.abspath(args.dir),
         ignore_dirs,
+        extensions,
         output_file,
     )
 
@@ -873,6 +887,7 @@ def run_both_mode(args):
     ignore_dirs = parse_ignore_dirs(args)
     extensions = parse_extensions(args)
     prefixes = parse_prefixes(args)
+    resource_exts = extensions if extensions else {".bin"}
 
     hash_to_files, total_files, total_size = scan_files_for_duplicates(
         args.dir, ignore_dirs, extensions, prefixes
@@ -912,16 +927,16 @@ def run_both_mode(args):
                 for ext in args.code_ext.split(",")
             )
 
-            bin_files = scan_bin_files(args.dir, ignore_dirs)
+            bin_files = scan_resource_files(args.dir, ignore_dirs, resource_exts)
             print()
             print("Analyzing unused resources...")
             unused_files, matched = find_unused_resources(
-                bin_files, args.code, ignore_dirs, file_extensions
+                bin_files, args.code, ignore_dirs, file_extensions, resource_exts
             )
 
             if unused_files:
                 unused_size = sum(size for _, size in unused_files.values())
-                print(f"Found {len(unused_files)} unused .bin files")
+                print(f"Found {len(unused_files)} unused resource files")
                 print(f"Unused size: {format_size(unused_size)}")
             else:
                 print("✅ All resource files are referenced!")
@@ -1106,7 +1121,7 @@ def generate_combined_report(
         else:
             unused_size = sum(size for _, size in unused_files.values())
 
-            lines.append(f"Found **{len(unused_files)}** unused .bin files:")
+            lines.append(f"Found **{len(unused_files)}** unused resource files:")
             lines.append("")
             lines.append(f"- Unused size: {format_size(unused_size)}")
             if resource_files > 0:
@@ -1164,7 +1179,7 @@ Examples:
 
 Mode Description:
   dup     - Find duplicate files by content hash
-  unused  - Find .bin resources not referenced in code
+  unused  - Find resources not referenced in code (default: .bin)
   both    - Run both checks in one command
         """,
     )
@@ -1243,7 +1258,7 @@ Mode Description:
         "-c",
         "--code",
         metavar="PATH",
-        help="Code directory to scan for .bin references (required for unused/both mode)",
+        help="Code directory to scan for resource references (required for unused/both mode)",
     )
     parser.add_argument(
         "--code-ext",
