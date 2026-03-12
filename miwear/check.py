@@ -262,6 +262,7 @@ def generate_dup_report(
     lines.append("# Duplicate File Report")
     lines.append("")
     lines.append(f"**Generated**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    lines.append(f"**Command**: `{' '.join(sys.argv)}`")
     lines.append(f"**Scanned Path**: `{root_path}`")
 
     if ignore_dirs:
@@ -610,6 +611,7 @@ def generate_unused_report(
     lines.append("# Unused .bin Resource File Report")
     lines.append("")
     lines.append(f"**Generated**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    lines.append(f"**Command**: `{' '.join(sys.argv)}`")
     lines.append(f"**Code Path**: `{code_path}`")
     lines.append(f"**Resource Path**: `{resource_path}`")
 
@@ -1004,6 +1006,7 @@ def generate_combined_report(
     lines.append("# Resource Check Report - Full Analysis")
     lines.append("")
     lines.append(f"**Generated**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    lines.append(f"**Command**: `{' '.join(sys.argv)}`")
     lines.append(f"**Scanned Path**: `{scan_path}`")
 
     if code_path:
