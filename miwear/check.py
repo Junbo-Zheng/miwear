@@ -1001,6 +1001,162 @@ def run_both_mode(args):
     print("=" * 60)
 
 
+def extract_base_name(filename: str) -> str:
+    """Extract base name from filename, taking first part before first dot.
+
+    Examples:
+        confirm.indexed_8.png -> confirm
+        confirm.png -> confirm
+        icon.24.png -> icon
+    """
+    first_dot = filename.find(".")
+    if first_dot == -1:
+        return filename
+    return filename[:first_dot]
+
+
+def scan_files_for_diff(
+    root_path: str,
+    ignore_dirs: Set[str],
+) -> Tuple[Dict[str, Tuple[str, int]], Dict[str, int]]:
+    """Scan files and return mapping of key -> (full_path, size), and dir -> count.
+
+    key = relative_dir/base_name (e.g., settings/icon/confirm)
+    This handles same filenames in different directories.
+    """
+    files_by_key: Dict[str, Tuple[str, int]] = {}
+    dir_stats: Dict[str, int] = defaultdict(int)
+    root = Path(root_path).resolve()
+
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d not in ignore_dirs]
+
+        for filename in filenames:
+            if filename.startswith("."):
+                continue
+            base_name = extract_base_name(filename)
+            if not base_name:
+                continue
+            filepath = os.path.join(dirpath, filename)
+            try:
+                file_size = os.path.getsize(filepath)
+                rel_path = os.path.relpath(filepath, root)
+                dir_path = os.path.dirname(rel_path)
+                key = f"{dir_path}/{base_name}" if dir_path else base_name
+                if dir_path not in dir_stats:
+                    dir_stats[dir_path] = 0
+                dir_stats[dir_path] += 1
+                files_by_key[key] = (rel_path, file_size)
+            except OSError as e:
+                print(f"Warning: Cannot access file {filepath}: {e}", file=sys.stderr)
+
+    return files_by_key, dict(dir_stats)
+
+
+def run_diff_mode(args):
+    """Run diff mode to compare two directories."""
+    if not args.path1:
+        print("Error: --path1 is required for diff mode", file=sys.stderr)
+        sys.exit(1)
+
+    if not args.path2:
+        print("Error: --path2 is required for diff mode", file=sys.stderr)
+        sys.exit(1)
+
+    if not os.path.isdir(args.path1):
+        print(f"Error: Path1 does not exist: {args.path1}", file=sys.stderr)
+        sys.exit(1)
+
+    if not os.path.isdir(args.path2):
+        print(f"Error: Path2 does not exist: {args.path2}", file=sys.stderr)
+        sys.exit(1)
+
+    ignore_dirs = parse_ignore_dirs(args)
+
+    path1_abs = os.path.abspath(args.path1)
+    path2_abs = os.path.abspath(args.path2)
+
+    print("=" * 60)
+    print("Directory Comparison Tool (Diff Mode)")
+    print("=" * 60)
+    print(f"Path1: {path1_abs}")
+    print(f"Path2: {path2_abs}")
+    if ignore_dirs:
+        print(f"Ignoring directories: {', '.join(sorted(ignore_dirs))}")
+    print()
+
+    files1, dir_stats1 = scan_files_for_diff(args.path1, ignore_dirs)
+    files2, dir_stats2 = scan_files_for_diff(args.path2, ignore_dirs)
+
+    print(f"Found {len(files1)} unique files in {args.path1}")
+    print(f"Found {len(files2)} unique files in {args.path2}")
+    print()
+
+    if args.sort == "count":
+        sorted_dirs1 = sorted(dir_stats1.items(), key=lambda x: x[1], reverse=True)
+        sorted_dirs2 = sorted(dir_stats2.items(), key=lambda x: x[1], reverse=True)
+    else:
+        sorted_dirs1 = sorted(dir_stats1.items())
+        sorted_dirs2 = sorted(dir_stats2.items())
+
+    print(f"--- {args.path1} File Count by Directory ---")
+    for dir_path, count in sorted_dirs1:
+        print(f"  {dir_path or '.':<60} {count}")
+    print()
+
+    print(f"--- {args.path2} File Count by Directory ---")
+    for dir_path, count in sorted_dirs2:
+        print(f"  {dir_path or '.':<60} {count}")
+    print()
+
+    keys1 = set(files1.keys())
+    keys2 = set(files2.keys())
+
+    only_in_path1 = keys1 - keys2
+    only_in_path2 = keys2 - keys1
+    common_keys = keys1 & keys2
+
+    print("=" * 60)
+    print("Comparison Results")
+    print("=" * 60)
+    print(f"Files only in path1: {len(only_in_path1)}")
+    print(f"Files only in path2: {len(only_in_path2)}")
+    print(f"Common files: {len(common_keys)}")
+    print()
+
+    if only_in_path1:
+        print(f"--- Files only in {args.path1} ---")
+        for key in sorted(only_in_path1):
+            path1_info = files1[key]
+            print(f"  {path1_info[0]}")
+        print()
+
+    if only_in_path2:
+        print(f"--- Files only in {args.path2} ---")
+        for key in sorted(only_in_path2):
+            path2_info = files2[key]
+            print(f"  {path2_info[0]}")
+        print()
+
+    print("=" * 60)
+    print("Summary")
+    print("=" * 60)
+    print(f"Total files in {args.path1}: {len(files1)}")
+    print(f"Total files in {args.path2}: {len(files2)}")
+    print(f"Missing in {args.path2}: {len(only_in_path1)}")
+    print(f"Extra in {args.path2}: {len(only_in_path2)}")
+    print(f"Common files: {len(common_keys)}")
+
+    if len(only_in_path1) > 0 or len(only_in_path2) > 0:
+        print()
+        print("❌ Differences found!")
+    else:
+        print()
+        print("✅ All files match!")
+
+    print("=" * 60)
+
+
 def generate_combined_report(
     duplicates: Dict[str, Tuple[List[str], int]],
     unused_files: Dict[str, Tuple[str, int]],
@@ -1189,9 +1345,10 @@ Mode Description:
     parser.add_argument(
         "-m",
         "--mode",
-        choices=["dup", "unused", "both"],
+        choices=["dup", "unused", "both", "diff"],
         default="dup",
-        help="Operation mode: dup (find duplicates), unused (find unused resources), both (run both) (default: dup)",
+        help="Operation mode: dup (find duplicates), unused (find unused resources), "
+        "both (run both), diff (compare two directories) (default: dup)",
     )
 
     # Common arguments
@@ -1200,7 +1357,8 @@ Mode Description:
         "--dir",
         metavar="PATH",
         default=".",
-        help="Target directory to scan (duplicates scan dir or resource dir, default: current directory)",
+        help="Target directory to scan (duplicates scan dir or resource dir, "
+        "default: current directory)",
     )
     parser.add_argument(
         "-i",
@@ -1270,6 +1428,23 @@ Mode Description:
         ".py,.java,.js,.ts,.json)",
     )
 
+    parser.add_argument(
+        "--path1",
+        metavar="PATH",
+        help="First directory for diff mode (source, e.g., design folder with PNG files)",
+    )
+    parser.add_argument(
+        "--path2",
+        metavar="PATH",
+        help="Second directory for diff mode (target, e.g., rgb888 folder with bin files)",
+    )
+    parser.add_argument(
+        "--sort",
+        choices=["alpha", "count"],
+        default="alpha",
+        help="Sort directory listing by alpha (alphabetical) or count (by file count, default: alpha)",
+    )
+
     args = parser.parse_args()
 
     # Validate arguments based on mode
@@ -1285,6 +1460,8 @@ Mode Description:
         run_unused_mode(args)
     elif args.mode == "both":
         run_both_mode(args)
+    elif args.mode == "diff":
+        run_diff_mode(args)
 
 
 if __name__ == "__main__":
