@@ -127,6 +127,32 @@ miwear_check -m unused -c ./apps -d ./res --prefix "/resource/app:"
 miwear_check -m both -d ./res -c ./apps -e bin
 ```
 
+**Compare two directories (diff mode):**
+
+Compare files between design folder (e.g., PNG files) and converted folder (e.g., BIN files):
+
+```bash
+miwear_check -m diff
+```
+
+With custom paths:
+
+```bash
+miwear_check -m diff --path1 ./design/app --path2 ./rgb888/app
+```
+
+Sort by file count instead of alphabetical:
+
+```bash
+miwear_check -m diff --sort count
+```
+
+**How diff mode works:**
+- Compares files by extracting base name (first part before dot) from filenames
+- Example: `confirm.indexed_8.png` → base name `confirm` matches `confirm.bin`
+- Uses `relative_dir/base_name` as key, so same filenames in different directories are handled correctly
+- Shows files only in path1, files only in path2, and common files
+
 ### 7. YMODEM File Transfer
 
 Transfer a file via YMODEM over serial port:
