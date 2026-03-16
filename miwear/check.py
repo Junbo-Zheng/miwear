@@ -1334,10 +1334,16 @@ Examples:
   # Run both checks
   %(prog)s --mode both -d ./res -c ./apps -e bin
 
+  # Compare two directories (diff mode)
+  %(prog)s --mode diff --path1 ./design --path2 ./res
+  %(prog)s --mode diff --path1 ./design --path2 ./res --sort count
+  %(prog)s --mode diff --path1 ./design --path2 ./res -i .git,__pycache__
+
 Mode Description:
   dup     - Find duplicate files by content hash
   unused  - Find resources not referenced in code (default: .bin)
   both    - Run both checks in one command
+  diff    - Compare two directories and find missing/extra files
         """,
     )
 
