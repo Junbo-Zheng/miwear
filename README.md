@@ -6,7 +6,7 @@ A comprehensive Python Miwear toolkit to extract and process archive log files.
 
 - Supports batch extraction of `.tar.gz` , `.zip` and `.gz` files.
 - Command-line tools for log processing, validation, merging and unzipping.
-- Resource check tool for finding duplicate files and unused resources.
+- Resource check tool for finding duplicate files, unused resources, and directory comparison.
 - Serial command sender for interacting with serial devices (requires `pyserial`).
 - YMODEM file transfer over serial port (requires `pyserial`).
 - Designed for automation and integration into your workflow.
@@ -47,7 +47,7 @@ After installation, you get several standalone CLI tools:
 - `miwear_uz` : Versatile archive decompression utility.
 - `miwear_serial` : Serial command sender for interacting with serial devices (requires `pyserial`).
 - `miwear_ymodem` : YMODEM file transfer over serial port (requires `pyserial`).
-- `miwear_check` : Resource check tool for finding duplicate files and unused resources.
+- `miwear_check` : Resource check tool for finding duplicate files, unused resources, and directory comparison.
 
 ## Usage Examples
 
@@ -129,29 +129,36 @@ miwear_check -m both -d ./res -c ./apps -e bin
 
 **Compare two directories (diff mode):**
 
-Compare files between design folder (e.g., PNG files) and converted folder (e.g., BIN files):
+Compare files between two directories (e.g., design folder with PNG files vs converted folder with BIN files):
 
 ```bash
-miwear_check -m diff
+miwear_check -m diff --path1 ./design --path2 ./res
 ```
 
-With custom paths:
+Compare specific subdirectories:
 
 ```bash
-miwear_check -m diff --path1 ./design/app --path2 ./rgb888/app
+miwear_check -m diff --path1 ./design/app --path2 ./res/app
 ```
 
-Sort by file count instead of alphabetical:
+Ignore specific directories:
 
 ```bash
-miwear_check -m diff --sort count
+miwear_check -m diff --path1 ./design --path2 ./res -i .git,node_modules
+```
+
+Sort directory listing by file count instead of alphabetical:
+
+```bash
+miwear_check -m diff --path1 ./design --path2 ./res --sort count
 ```
 
 **How diff mode works:**
-- Compares files by extracting base name (first part before dot) from filenames
-- Example: `confirm.indexed_8.png` → base name `confirm` matches `confirm.bin`
-- Uses `relative_dir/base_name` as key, so same filenames in different directories are handled correctly
-- Shows files only in path1, files only in path2, and common files
+- Compares files by extracting base name (first part before the first dot) from filenames
+- Example: `confirm.indexed_8.png` and `confirm.bin` both have base name `confirm`, so they match
+- Uses `relative_dir/base_name` as the comparison key, so same filenames in different subdirectories are handled correctly
+- Reports files only in path1 (missing in path2), files only in path2 (extra), and common files
+- Shows per-directory file count statistics for both paths
 
 ### 7. YMODEM File Transfer
 
