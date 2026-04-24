@@ -93,6 +93,191 @@ def parse_prefixes(args) -> Set[str]:
     return prefixes
 
 
+# ============ View Variant Detection ============
+
+VIEW_VARIANT_RE = re.compile(r"^view(_\d+)?$")
+RES_DIR_RE = re.compile(r"^res")
+
+
+def detect_view_variants(
+    root_path: str, ignore_dirs: Set[str], extensions: Set[str]
+) -> Dict[str, Tuple[int, int]]:
+    """Detect view/res variant paths (view/res_480_480, view_65/res, ...).
+
+    Scans for view(_\d+)? directories, then looks one level deeper for
+    res* sub-directories. Returns dict of "view_dir/res_dir" ->
+    (app_count, file_count) only when 2+ variants exist.
+    """
+    variants: Dict[str, Set[str]] = defaultdict(set)
+    file_counts: Dict[str, int] = defaultdict(int)
+
+    for dirpath, dirnames, filenames in os.walk(root_path):
+        dirnames[:] = [d for d in dirnames if d not in ignore_dirs]
+        for d in list(dirnames):
+            if VIEW_VARIANT_RE.match(d):
+                view_path = os.path.join(dirpath, d)
+                app_name = os.path.relpath(dirpath, root_path)
+                # Look one level deeper for res* directories
+                try:
+                    sub_dirs = [
+                        s for s in os.listdir(view_path)
+                        if os.path.isdir(os.path.join(view_path, s))
+                        and RES_DIR_RE.match(s)
+                    ]
+                except OSError:
+                    continue
+                for res_dir in sub_dirs:
+                    key = f"{d}/{res_dir}"
+                    variants[key].add(app_name)
+                    res_path = os.path.join(view_path, res_dir)
+                    for vdp, _, vfns in os.walk(res_path):
+                        for fn in vfns:
+                            if not extensions or any(
+                                fn.endswith(e) for e in extensions
+                            ):
+                                file_counts[key] += 1
+                # Prevent os.walk from descending into view dirs
+                dirnames.remove(d)
+
+    if len(variants) < 2:
+        return {}
+    return {v: (len(variants[v]), file_counts[v]) for v in sorted(variants)}
+
+
+def select_view_variants(variants: Dict[str, Tuple[int, int]]) -> str:
+    """Interactive single-select menu for view variant.
+
+    Returns the chosen variant key (e.g. "view/res_480_480").
+    """
+    items = list(variants.keys())
+    cursor = max(range(len(items)), key=lambda i: variants[items[i]][1])  # default: most files
+    total_lines = len(items) + 2  # header + blank + items
+
+    # ANSI colors
+    CYAN_BG = "\033[46;30m"  # cyan background, black text
+    RESET = "\033[0m"
+
+    def build_lines():
+        lines = [
+            "Select view variant to scan (\u2191\u2193 move, Enter confirm):",
+            "",
+        ]
+        for i, name in enumerate(items):
+            apps, files = variants[name]
+            mark = "*" if i == cursor else " "
+            arrow = ">" if i == cursor else " "
+            line = f"  {arrow} [{mark}] {name:<12} ({apps} apps, {files:,} files)"
+            if i == cursor:
+                line = f"{CYAN_BG}{line}{RESET}"
+            lines.append(line)
+        return lines
+
+    def draw(first_time=False):
+        out = ""
+        if not first_time:
+            out += f"\033[{total_lines}A"
+        for line in build_lines():
+            out += f"\r\033[K{line}\n"
+        sys.stdout.write(out)
+        sys.stdout.flush()
+
+    draw(first_time=True)
+
+    try:
+        import tty
+        import termios
+
+        fd = sys.stdin.fileno()
+        old_settings = termios.tcgetattr(fd)
+        tty.setraw(fd)
+        try:
+            while True:
+                ch = sys.stdin.read(1)
+                if ch == "\r":
+                    break
+                if ch in ("\x03", "\x04", "\x18"):  # Ctrl+C, Ctrl+D, Ctrl+X
+                    termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+                    print("\n\nAborted.")
+                    sys.exit(130)
+                if ch == "\x1b":
+                    seq = sys.stdin.read(2)
+                    if seq == "[A" and cursor > 0:
+                        cursor -= 1
+                        draw()
+                    elif seq == "[B" and cursor < len(items) - 1:
+                        cursor += 1
+                        draw()
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+    except Exception:
+        pass
+
+    print()
+    chosen = items[cursor]
+    print(f"Scanning: {chosen}")
+    print()
+    return chosen
+
+
+def confirm_open_browser() -> bool:
+    """Ask user whether to open HTML report in browser. Default: Yes."""
+    items = ["Yes", "No"]
+    cursor = 0  # default: Yes
+    total_lines = len(items) + 2
+
+    CYAN_BG = "\033[46;30m"
+    RESET = "\033[0m"
+
+    def draw(first_time=False):
+        out = ""
+        if not first_time:
+            out += f"\033[{total_lines}A"
+        out += "\r\033[KOpen report in browser?\n\r\033[K\n"
+        for i, name in enumerate(items):
+            mark = "*" if i == cursor else " "
+            arrow = ">" if i == cursor else " "
+            line = f"  {arrow} [{mark}] {name}"
+            if i == cursor:
+                line = f"{CYAN_BG}{line}{RESET}"
+            out += f"\r\033[K{line}\n"
+        sys.stdout.write(out)
+        sys.stdout.flush()
+
+    draw(first_time=True)
+
+    try:
+        import tty
+        import termios
+
+        fd = sys.stdin.fileno()
+        old_settings = termios.tcgetattr(fd)
+        tty.setraw(fd)
+        try:
+            while True:
+                ch = sys.stdin.read(1)
+                if ch == "\r":
+                    break
+                if ch in ("\x03", "\x04", "\x18"):
+                    termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+                    print()
+                    return False
+                if ch == "\x1b":
+                    seq = sys.stdin.read(2)
+                    if seq == "[A" and cursor > 0:
+                        cursor -= 1
+                        draw()
+                    elif seq == "[B" and cursor < len(items) - 1:
+                        cursor += 1
+                        draw()
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+    except Exception:
+        pass
+
+    print()
+    return cursor == 0
+
+
 # ============ Duplicate Files Functions ============
 
 
@@ -382,6 +567,174 @@ def generate_dup_report(
             f.write(report)
         print(f"\nReport saved to: {output_file}")
     return report
+
+
+_HTML_TEMPLATE = """\
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<title>Duplicate File Report</title>
+<style>
+*{{box-sizing:border-box}}
+body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:1400px;margin:0 auto;padding:20px;background:#f8f9fa;color:#333}}
+h1{{color:#1a73e8;border-bottom:3px solid #1a73e8;padding-bottom:10px}}
+h2{{color:#333;margin-top:30px}}
+.meta{{color:#666;font-size:13px;margin:4px 0}}
+.meta code{{background:#f0f0f0;padding:2px 6px;border-radius:3px;font-size:12px}}
+.summary-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin:20px 0}}
+.card{{background:#fff;border-radius:12px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,.08);text-align:center}}
+.card .value{{font-size:28px;font-weight:700;color:#1a73e8}}
+.card .label{{font-size:13px;color:#666;margin-top:4px}}
+.card.warn .value{{color:#e8710a}}
+.card.danger .value{{color:#d93025}}
+table{{width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.06);margin:16px 0}}
+th{{background:#1a73e8;color:#fff;padding:12px 16px;text-align:left;font-weight:600;cursor:pointer}}
+th:hover{{background:#1557b0}}
+td{{padding:10px 16px;border-bottom:1px solid #eee}}
+tr:hover td{{background:#f0f7ff}}
+td code{{background:#f0f0f0;padding:2px 8px;border-radius:4px;font-size:13px}}
+.group{{background:#fff;border-radius:8px;margin:12px 0;box-shadow:0 2px 8px rgba(0,0,0,.06);overflow:hidden}}
+.group-header{{padding:12px 16px;cursor:pointer;display:flex;justify-content:space-between;align-items:center}}
+.group-header:hover{{background:#f0f7ff}}
+.group-body{{padding:0 16px 16px;display:none}}
+.group.open .group-body{{display:block}}
+.group-header .arrow{{transition:transform .2s;margin-right:8px}}
+.group.open .group-header .arrow{{transform:rotate(90deg)}}
+.cross-app{{border-left:4px solid #e8710a}}
+.cross-app .group-header{{background:#fff8f0}}
+.tag{{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;margin-left:8px}}
+.tag-cross{{background:#fce4b8;color:#b36b00}}
+.tag-size{{background:#e8f0fe;color:#1a73e8}}
+.file-list{{list-style:none;padding:0;margin:8px 0}}
+.file-list li{{padding:4px 0;font-family:monospace;font-size:13px;color:#555}}
+.md5{{color:#999;font-size:12px;font-family:monospace}}
+.filter-bar{{margin:12px 0;display:flex;gap:12px;align-items:center}}
+.filter-bar input{{padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:14px;width:300px}}
+.filter-bar label{{font-size:13px;color:#666}}
+</style>
+</head><body>
+{body}
+<script>
+document.querySelectorAll('.group').forEach(g=>{{
+  g.querySelector('.group-header').addEventListener('click',()=>g.classList.toggle('open'))
+}});
+const fi=document.getElementById('groupFilter');
+if(fi)fi.addEventListener('input',()=>{{
+  const v=fi.value.toLowerCase();
+  document.querySelectorAll('.group').forEach(g=>{{
+    g.style.display=g.textContent.toLowerCase().includes(v)?'':'none'
+  }})
+}});
+const cb=document.getElementById('crossOnly');
+if(cb)cb.addEventListener('change',()=>{{
+  document.querySelectorAll('.group').forEach(g=>{{
+    if(cb.checked)g.style.display=g.classList.contains('cross-app')?'':'none';
+    else g.style.display=''
+  }})
+}});
+</script>
+</body></html>"""
+
+
+def generate_dup_report_html(
+    duplicates: Dict[str, Tuple[List[str], int]],
+    total_files: int,
+    total_size: int,
+    root_path: str,
+    ignore_dirs: Set[str],
+    extensions: Set[str],
+    prefixes: Set[str],
+    output_file: Optional[str] = None,
+) -> str:
+    """Generate duplicate files report in HTML format"""
+
+    def esc(s: str) -> str:
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    parts: List[str] = []
+    parts.append("<h1>Duplicate File Report</h1>")
+
+    # Metadata
+    parts.append(f'<p class="meta">Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</p>')
+    parts.append(f'<p class="meta">Scanned: <code>{esc(root_path)}</code></p>')
+    if ignore_dirs:
+        parts.append(f'<p class="meta">Ignored: {", ".join(f"<code>{esc(d)}</code>" for d in sorted(ignore_dirs))}</p>')
+    if extensions:
+        parts.append(f'<p class="meta">Extensions: {", ".join(sorted(extensions))}</p>')
+
+    # Summary cards
+    dup_count = sum(len(files) for files, _ in duplicates.values())
+    dup_groups = len(duplicates)
+    wasted = sum(size * (len(files) - 1) for files, size in duplicates.values())
+
+    cards = [
+        ("Total Files", f"{total_files:,}", ""),
+        ("Total Size", format_size(total_size), ""),
+        ("Duplicate Groups", f"{dup_groups:,}", "warn"),
+        ("Duplicate Files", f"{dup_count:,}", "warn"),
+        ("Wasted Space", format_size(wasted), "danger"),
+    ]
+    parts.append('<div class="summary-grid">')
+    for label, value, cls in cards:
+        parts.append(f'<div class="card {cls}"><div class="value">{value}</div><div class="label">{label}</div></div>')
+    parts.append("</div>")
+
+    if not duplicates:
+        parts.append("<h2>No duplicate files found!</h2>")
+        html = _HTML_TEMPLATE.format(body="\n".join(parts))
+        if output_file:
+            with open(output_file, "w", encoding="utf-8") as f:
+                f.write(html)
+            print(f"\nReport saved to: {output_file}")
+        return html
+
+    sorted_dups = sorted(duplicates.items(), key=lambda x: x[1][1], reverse=True)
+
+    # Directory stats table
+    dir_stats: Dict[str, Dict[str, int]] = defaultdict(lambda: {"count": 0, "size": 0})
+    for _, (paths, size) in duplicates.items():
+        for p in paths:
+            d = os.path.dirname(p) or "."
+            dir_stats[d]["count"] += 1
+            dir_stats[d]["size"] += size
+
+    parts.append("<h2>Duplicate Files by Directory</h2>")
+    parts.append("<table><tr><th>Directory</th><th>Files</th><th>Size</th></tr>")
+    for d, st in sorted(dir_stats.items(), key=lambda x: x[1]["size"], reverse=True):
+        parts.append(f"<tr><td><code>{esc(d)}</code></td><td>{st['count']}</td><td>{format_size(st['size'])}</td></tr>")
+    parts.append("</table>")
+
+    # Duplicate groups
+    parts.append("<h2>Duplicate Details</h2>")
+    parts.append('<div class="filter-bar">')
+    parts.append('<input id="groupFilter" placeholder="Filter by path or filename...">')
+    parts.append('<label><input type="checkbox" id="crossOnly"> Cross-directory only</label>')
+    parts.append("</div>")
+
+    for idx, (file_hash, (paths, size)) in enumerate(sorted_dups, 1):
+        apps = sorted(set(p.split("/")[0] for p in paths))
+        cross = len(apps) > 1
+        cross_cls = "cross-app" if cross else ""
+        cross_tag = '<span class="tag tag-cross">cross-dir</span>' if cross else ""
+        apps_str = " &harr; ".join(esc(a) for a in apps)
+        save = format_size(size * (len(paths) - 1))
+
+        parts.append(f'<div class="group {cross_cls}">')
+        parts.append(f'<div class="group-header">')
+        parts.append(f'<span><span class="arrow">&#9654;</span>Group {idx} &mdash; <strong>{len(paths)} files</strong> &times; {format_size(size)} [{apps_str}]{cross_tag}</span>')
+        parts.append(f'<span class="tag tag-size">save {save}</span>')
+        parts.append("</div>")
+        parts.append('<div class="group-body"><ul class="file-list">')
+        for p in sorted(paths):
+            parts.append(f"<li>{esc(p)}</li>")
+        parts.append(f'</ul><div class="md5">MD5: {file_hash}</div></div></div>')
+
+    html = _HTML_TEMPLATE.format(body="\n".join(parts))
+    if output_file:
+        with open(output_file, "w", encoding="utf-8") as f:
+            f.write(html)
+        print(f"\nReport saved to: {output_file}")
+    return html
 
 
 # ============ Unused Resources Functions ============
@@ -743,6 +1096,32 @@ def run_dup_mode(args):
     extensions = parse_extensions(args)
     prefixes = parse_prefixes(args)
 
+    # Auto-detect view variants when user hasn't manually specified ignores
+    if not ignore_dirs:
+        variants = detect_view_variants(args.dir, ignore_dirs, extensions)
+        if variants:
+            print()
+            print(
+                "Detected multiple view variants across applications:"
+            )
+            print()
+            chosen = select_view_variants(variants)
+            # Ignore all view variant dirs, then un-ignore the chosen one
+            all_view_dirs = {k.split("/")[0] for k in variants}
+            chosen_view_dir = chosen.split("/")[0]
+            chosen_res_dir = chosen.split("/")[1]
+            # Ignore other view dirs entirely
+            for vd in all_view_dirs:
+                if vd != chosen_view_dir:
+                    ignore_dirs.add(vd)
+            # For the chosen view dir, ignore sibling res dirs
+            sibling_res = {
+                k.split("/")[1] for k in variants
+                if k.split("/")[0] == chosen_view_dir
+                and k.split("/")[1] != chosen_res_dir
+            }
+            ignore_dirs.update(sibling_res)
+
     print("=" * 60)
     print("Duplicate File Detector")
     print("=" * 60)
@@ -768,16 +1147,15 @@ def run_dup_mode(args):
 
     print("\nGenerating report...")
     output_file = None if args.no_output else args.output
-    generate_dup_report(
-        duplicates,
-        total_files,
-        total_size,
-        os.path.abspath(args.dir),
-        ignore_dirs,
-        extensions,
-        prefixes,
-        output_file,
-    )
+    html_file = None
+    if output_file:
+        report_args = (
+            duplicates, total_files, total_size,
+            os.path.abspath(args.dir), ignore_dirs, extensions, prefixes,
+        )
+        generate_dup_report(*report_args, output_file)
+        html_file = (output_file[:-3] if output_file.endswith(".md") else output_file) + ".html"
+        generate_dup_report_html(*report_args, html_file)
 
     print("\n" + "=" * 60)
     print("Scan Results Summary")
@@ -795,6 +1173,12 @@ def run_dup_mode(args):
         print(f"Wasted space: {format_size(wasted_size)}")
 
     print("=" * 60)
+
+    if html_file and os.path.isfile(html_file):
+        if confirm_open_browser():
+            import webbrowser
+
+            webbrowser.open(f"file://{os.path.abspath(html_file)}")
 
 
 def run_unused_mode(args):
@@ -1446,28 +1830,62 @@ def main():
         description="Resource Check Tool - Find duplicate files and unused resources",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Examples:
-  # Find duplicate files (default mode)
-  %(prog)s -d ./res -e bin
-  %(prog)s -d ./res -e bin --action delete
-
-  # Find unused resources
-  %(prog)s --mode unused -c ./apps -d ./res
-  %(prog)s --mode unused -c ./apps -d ./res --prefix "/resource/app:"
-
-  # Run both checks
-  %(prog)s --mode both -d ./res -c ./apps -e bin
-
-  # Compare two directories (diff mode)
-  %(prog)s --mode diff --path1 ./design --path2 ./res
-  %(prog)s --mode diff --path1 ./design --path2 ./res --sort count
-  %(prog)s --mode diff --path1 ./design --path2 ./res -i .git,__pycache__
-
 Mode Description:
-  dup     - Find duplicate files by content hash
+  dup     - Find duplicate files by content hash (default)
   unused  - Find resources not referenced in code (default: .bin)
-  both    - Run both checks in one command
-  diff    - Compare two directories and find missing/extra files (with report)
+  both    - Run both dup + unused checks in one command
+  diff    - Compare two directories and find missing/extra files
+
+Examples:
+
+  1. Find duplicate files (dup mode, default):
+
+    %(prog)s -d ./res -e bin
+    %(prog)s -d ./res -e bin png
+    %(prog)s -d ./res -e bin --action delete
+    %(prog)s -d ./res -e bin -p theme_ config_
+
+  2. Find duplicate files with directory ignore:
+
+    %(prog)s -d ./res -e bin -i .git,node_modules
+    %(prog)s -d ./applications -e bin png -i po,view_65,view_66,view_67
+
+  3. Auto view variant detection (dup mode):
+
+    When scanning a directory containing view/view_XX sub-directories
+    with res* sub-directories (e.g., view/res_480_480, view_65/res),
+    the tool automatically detects these variants and prompts a
+    single-select menu. Default selection is the variant with the
+    most files. This is skipped when -i is manually specified.
+
+    %(prog)s -d ./applications -e bin png
+
+  4. Find unused resources (unused mode):
+
+    %(prog)s -m unused -c ./apps -d ./res
+    %(prog)s -m unused -c ./apps -d ./res -e bin png
+    %(prog)s -m unused -c ./apps -d ./res --prefix "/resource/app:"
+    %(prog)s -m unused -c ./apps -d ./res --code-ext ".c,.h,.cpp,.java"
+
+  5. Run both checks (both mode):
+
+    %(prog)s -m both -d ./res -c ./apps -e bin
+
+  6. Compare two directories (diff mode):
+
+    %(prog)s -m diff --path1 ./design --path2 ./res
+    %(prog)s -m diff --path1 ./design/app --path2 ./res/app
+    %(prog)s -m diff --path1 ./design --path2 ./res --sort count
+    %(prog)s -m diff --path1 ./design --path2 ./res -i .git,__pycache__
+
+  7. Output control:
+
+    Reports are generated in both Markdown and HTML formats.
+    After generation, you will be prompted to open the HTML
+    report in your browser.
+
+    %(prog)s -d ./res -e bin -o my_report.md
+    %(prog)s -d ./res -e bin --no-output
         """,
     )
 
