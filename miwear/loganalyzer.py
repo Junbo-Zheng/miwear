@@ -326,7 +326,7 @@ class AppIDAnalyzer(BaseAnalyzer):
                     minutes = (total_seconds % 3600) // 60
                     seconds = total_seconds % 60
                     time_duration = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
-                except:
+                except Exception:
                     time_duration = "N/A"
 
             # Generate table rows
@@ -413,8 +413,12 @@ class ScreenStateAnalyzer(BaseAnalyzer):
         Returns:
             ScreenStateEntry object, or None if not a screen state change log
         """
-        # Match format: [01/02 05:51:19] [59] [ap] [MiWearScreen] async_apply_screen_state_change: Screen state: ON-->OFF, source: TOUCH_PALM
-        pattern = r"\[(\d{2}/\d{2} \d{2}:\d{2}:\d{2})\].*async_apply_screen_state_change: Screen state: (\w+)-->(\w+), source: (\w+)"
+        # Match format: [01/02 05:51:19] [59] [ap] [MiWearScreen]
+        # async_apply_screen_state_change: Screen state: ON-->OFF, source: TOUCH_PALM
+        pattern = (
+            r"\[(\d{2}/\d{2} \d{2}:\d{2}:\d{2})\].*"
+            r"async_apply_screen_state_change: Screen state: (\w+)-->(\w+), source: (\w+)"
+        )
         match = re.search(pattern, line)
 
         if match:
@@ -576,7 +580,7 @@ class ScreenStateAnalyzer(BaseAnalyzer):
                     minutes = (total_seconds % 3600) // 60
                     seconds = total_seconds % 60
                     time_duration = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
-                except:
+                except Exception:
                     time_duration = "N/A"
 
             return {
@@ -908,7 +912,9 @@ def generate_unified_html(appid_data, screen_data, output_file: str):
                 </div>
             </div>
             <div class="search-box">
-                <input type="text" id="searchAppid" placeholder="🔍 Search by AppID, PageID, or App Name..." onkeyup="filterTable('appid')">
+                <input type="text" id="searchAppid"
+                    placeholder="Search by AppID, PageID, or App Name..."
+                    onkeyup="filterTable('appid')">
                 <div id="searchResultAppid" class="search-result" style="display: none;"></div>
             </div>
             <div class="table-container">
@@ -946,7 +952,8 @@ def generate_unified_html(appid_data, screen_data, output_file: str):
                 </div>
             </div>
             <div class="search-box">
-                <input type="text" id="searchScreen" placeholder="🔍 Search by state or source..." onkeyup="filterTable('screen')">
+                <input type="text" id="searchScreen" placeholder="Search by state or source..."
+                    onkeyup="filterTable('screen')">
                 <div id="searchResultScreen" class="search-result" style="display: none;"></div>
             </div>
             <div class="table-container">
