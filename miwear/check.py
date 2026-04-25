@@ -104,7 +104,7 @@ def detect_view_variants(
 ) -> Dict[str, Tuple[int, int]]:
     """Detect view/res variant paths (view/res_480_480, view_65/res, ...).
 
-    Scans for view(_\d+)? directories, then looks one level deeper for
+    Scans for view variant directories, then looks one level deeper for
     res* sub-directories. Returns dict of "view_dir/res_dir" ->
     (app_count, file_count) only when 2+ variants exist.
     """
@@ -120,7 +120,8 @@ def detect_view_variants(
                 # Look one level deeper for res* directories
                 try:
                     sub_dirs = [
-                        s for s in os.listdir(view_path)
+                        s
+                        for s in os.listdir(view_path)
                         if os.path.isdir(os.path.join(view_path, s))
                         and RES_DIR_RE.match(s)
                     ]
@@ -150,7 +151,9 @@ def select_view_variants(variants: Dict[str, Tuple[int, int]]) -> str:
     Returns the chosen variant key (e.g. "view/res_480_480").
     """
     items = list(variants.keys())
-    cursor = max(range(len(items)), key=lambda i: variants[items[i]][1])  # default: most files
+    cursor = max(
+        range(len(items)), key=lambda i: variants[items[i]][1]
+    )  # default: most files
     total_lines = len(items) + 2  # header + blank + items
 
     # ANSI colors
@@ -576,7 +579,8 @@ _HTML_TEMPLATE = """\
 <title>Duplicate File Report</title>
 <style>
 *{{box-sizing:border-box}}
-body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:1400px;margin:0 auto;padding:20px;background:#f8f9fa;color:#333}}
+body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    max-width:1400px;margin:0 auto;padding:20px;background:#f8f9fa;color:#333}}
 h1{{color:#1a73e8;border-bottom:3px solid #1a73e8;padding-bottom:10px}}
 h2{{color:#333;margin-top:30px}}
 .meta{{color:#666;font-size:13px;margin:4px 0}}
@@ -587,7 +591,8 @@ h2{{color:#333;margin-top:30px}}
 .card .label{{font-size:13px;color:#666;margin-top:4px}}
 .card.warn .value{{color:#e8710a}}
 .card.danger .value{{color:#d93025}}
-table{{width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.06);margin:16px 0}}
+table{{width:100%;border-collapse:collapse;background:#fff;border-radius:8px;
+    overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.06);margin:16px 0}}
 th{{background:#1a73e8;color:#fff;padding:12px 16px;text-align:left;font-weight:600;cursor:pointer}}
 th:hover{{background:#1557b0}}
 td{{padding:10px 16px;border-bottom:1px solid #eee}}
@@ -655,10 +660,14 @@ def generate_dup_report_html(
     parts.append("<h1>Duplicate File Report</h1>")
 
     # Metadata
-    parts.append(f'<p class="meta">Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</p>')
+    parts.append(
+        f'<p class="meta">Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</p>'
+    )
     parts.append(f'<p class="meta">Scanned: <code>{esc(root_path)}</code></p>')
     if ignore_dirs:
-        parts.append(f'<p class="meta">Ignored: {", ".join(f"<code>{esc(d)}</code>" for d in sorted(ignore_dirs))}</p>')
+        parts.append(
+            f'<p class="meta">Ignored: {", ".join(f"<code>{esc(d)}</code>" for d in sorted(ignore_dirs))}</p>'
+        )
     if extensions:
         parts.append(f'<p class="meta">Extensions: {", ".join(sorted(extensions))}</p>')
 
@@ -676,7 +685,9 @@ def generate_dup_report_html(
     ]
     parts.append('<div class="summary-grid">')
     for label, value, cls in cards:
-        parts.append(f'<div class="card {cls}"><div class="value">{value}</div><div class="label">{label}</div></div>')
+        parts.append(
+            f'<div class="card {cls}"><div class="value">{value}</div><div class="label">{label}</div></div>'
+        )
     parts.append("</div>")
 
     if not duplicates:
@@ -701,14 +712,18 @@ def generate_dup_report_html(
     parts.append("<h2>Duplicate Files by Directory</h2>")
     parts.append("<table><tr><th>Directory</th><th>Files</th><th>Size</th></tr>")
     for d, st in sorted(dir_stats.items(), key=lambda x: x[1]["size"], reverse=True):
-        parts.append(f"<tr><td><code>{esc(d)}</code></td><td>{st['count']}</td><td>{format_size(st['size'])}</td></tr>")
+        parts.append(
+            f"<tr><td><code>{esc(d)}</code></td><td>{st['count']}</td><td>{format_size(st['size'])}</td></tr>"
+        )
     parts.append("</table>")
 
     # Duplicate groups
     parts.append("<h2>Duplicate Details</h2>")
     parts.append('<div class="filter-bar">')
     parts.append('<input id="groupFilter" placeholder="Filter by path or filename...">')
-    parts.append('<label><input type="checkbox" id="crossOnly"> Cross-directory only</label>')
+    parts.append(
+        '<label><input type="checkbox" id="crossOnly"> Cross-directory only</label>'
+    )
     parts.append("</div>")
 
     for idx, (file_hash, (paths, size)) in enumerate(sorted_dups, 1):
@@ -720,8 +735,12 @@ def generate_dup_report_html(
         save = format_size(size * (len(paths) - 1))
 
         parts.append(f'<div class="group {cross_cls}">')
-        parts.append(f'<div class="group-header">')
-        parts.append(f'<span><span class="arrow">&#9654;</span>Group {idx} &mdash; <strong>{len(paths)} files</strong> &times; {format_size(size)} [{apps_str}]{cross_tag}</span>')
+        parts.append('<div class="group-header">')
+        parts.append(
+            f'<span><span class="arrow">&#9654;</span>'
+            f"Group {idx} &mdash; <strong>{len(paths)} files</strong>"
+            f" &times; {format_size(size)} [{apps_str}]{cross_tag}</span>"
+        )
         parts.append(f'<span class="tag tag-size">save {save}</span>')
         parts.append("</div>")
         parts.append('<div class="group-body"><ul class="file-list">')
@@ -1101,9 +1120,7 @@ def run_dup_mode(args):
         variants = detect_view_variants(args.dir, ignore_dirs, extensions)
         if variants:
             print()
-            print(
-                "Detected multiple view variants across applications:"
-            )
+            print("Detected multiple view variants across applications:")
             print()
             chosen = select_view_variants(variants)
             # Ignore all view variant dirs, then un-ignore the chosen one
@@ -1116,7 +1133,8 @@ def run_dup_mode(args):
                     ignore_dirs.add(vd)
             # For the chosen view dir, ignore sibling res dirs
             sibling_res = {
-                k.split("/")[1] for k in variants
+                k.split("/")[1]
+                for k in variants
                 if k.split("/")[0] == chosen_view_dir
                 and k.split("/")[1] != chosen_res_dir
             }
@@ -1150,11 +1168,18 @@ def run_dup_mode(args):
     html_file = None
     if output_file:
         report_args = (
-            duplicates, total_files, total_size,
-            os.path.abspath(args.dir), ignore_dirs, extensions, prefixes,
+            duplicates,
+            total_files,
+            total_size,
+            os.path.abspath(args.dir),
+            ignore_dirs,
+            extensions,
+            prefixes,
         )
         generate_dup_report(*report_args, output_file)
-        html_file = (output_file[:-3] if output_file.endswith(".md") else output_file) + ".html"
+        html_file = (
+            output_file[:-3] if output_file.endswith(".md") else output_file
+        ) + ".html"
         generate_dup_report_html(*report_args, html_file)
 
     print("\n" + "=" * 60)
