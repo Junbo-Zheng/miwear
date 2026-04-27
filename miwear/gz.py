@@ -19,8 +19,8 @@
 import os
 import gzip
 import argparse
-import sys
 import re
+from typing import List
 
 try:
     from miwear import __version__
@@ -28,18 +28,18 @@ except ImportError:
     __version__ = "0.0.1"
 
 
-def is_gz_not_targz(filename):
+def is_gz_not_targz(filename: str) -> bool:
     return filename.endswith(".gz") and not filename.endswith(".tar.gz")
 
 
-def natural_sort_key(filename):
+def natural_sort_key(filename: str) -> List:
     filename = os.path.basename(filename)
     parts = re.split(r"(\d+)", filename)
     return [int(part) if part.isdigit() else part.lower() for part in parts]
 
 
-def get_sorted_gz_files(directory):
-    gz_files = []
+def get_sorted_gz_files(directory: str) -> List[str]:
+    gz_files: List[str] = []
 
     for root, dirs, files in os.walk(directory):
         for file in files:
@@ -50,7 +50,7 @@ def get_sorted_gz_files(directory):
     return gz_files
 
 
-def run(directory, log_file, output_file):
+def run(directory: str, log_file: str, output_file: str) -> None:
     gz_files = get_sorted_gz_files(directory)
 
     if not gz_files:
@@ -87,12 +87,14 @@ def run(directory, log_file, output_file):
     )
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description="both .gz file and the log file will be unzip and merged"
     )
     parser.add_argument(
-        "--version", action="store_true", help="Show miwear_gz version and exit."
+        "--version",
+        action="version",
+        version=f"%(prog)s {__version__}",
     )
 
     parser.add_argument(
@@ -115,9 +117,6 @@ def main():
     )
 
     args = parser.parse_args()
-    if args.version:
-        print(f"miwear_gz version: {__version__}")
-        sys.exit(0)
 
     run(args.path, args.log_file, args.output_file)
 

@@ -34,6 +34,9 @@ classifiers = [
 dependencies = []
 requires-python = ">=3.10"
 
+[project.optional-dependencies]
+serial = ["pyserial"]
+
 [project.urls]
 Homepage = "https://github.com/Junbo-Zheng/miwear"
 
@@ -44,7 +47,6 @@ miwear_tz = "miwear.targz:main"
 miwear_uz = "miwear.unzip:main"
 miwear_assert = "miwear.assert:main"
 miwear_serial = "miwear.serialtool:main"
-miwear_ymodem = "miwear.ymodem:main"
 miwear_check = "miwear.check:main"
 miwear_loganalyzer = "miwear.loganalyzer:main"
 

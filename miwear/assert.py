@@ -19,6 +19,7 @@
 import argparse
 import os
 import sys
+from typing import Optional
 
 try:
     from miwear import __version__
@@ -27,8 +28,11 @@ except ImportError:
 
 
 def run(
-    input_file_path, output_file_path, start_line_number=None, end_line_number=None
-):
+    input_file_path: str,
+    output_file_path: str,
+    start_line_number: Optional[int] = None,
+    end_line_number: Optional[int] = None,
+) -> None:
     if not os.path.exists(input_file_path):
         print(f"Error: Input file '{input_file_path}' does not exist.")
         sys.exit(1)
@@ -51,10 +55,18 @@ def run(
         lines = lines[start_line_number : end_line_number + 1]
 
     start_keyword = "Assertion failed panic"
-    start_line = next(i for i, line in enumerate(lines) if start_keyword in line) + 1
+    start_idx = next((i for i, line in enumerate(lines) if start_keyword in line), None)
+    if start_idx is None:
+        print(f"Error: Could not find '{start_keyword}' in the log file.")
+        sys.exit(1)
+    start_line = start_idx + 1
 
     end_keyword = "PID GROUP PRI POLICY"
-    end_line = next(i for i, line in enumerate(lines) if end_keyword in line) - 1
+    end_idx = next((i for i, line in enumerate(lines) if end_keyword in line), None)
+    if end_idx is None:
+        print(f"Error: Could not find '{end_keyword}' in the log file.")
+        sys.exit(1)
+    end_line = end_idx - 1
 
     filtered_lines = lines[start_line : end_line + 1]
 
@@ -65,15 +77,15 @@ def run(
     print(f"Filtered lines have been written to {output_file_path}")
 
 
-def main():
+def main() -> None:
     arg_parser = argparse.ArgumentParser(
         description="parse log to extract assert information"
     )
 
     arg_parser.add_argument(
         "--version",
-        action="store_true",
-        help="Show miwear_assert version and exit.",
+        action="version",
+        version=f"%(prog)s {__version__}",
     )
 
     arg_parser.add_argument(
@@ -95,9 +107,6 @@ def main():
     )
 
     args = arg_parser.parse_args()
-    if args.version:
-        print(f"miwear_assert version: {__version__}")
-        sys.exit(0)
 
     run(args.input_file, args.output_file, args.start_line, args.end_line)
 
