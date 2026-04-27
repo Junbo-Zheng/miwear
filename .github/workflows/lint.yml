@@ -20,7 +20,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install flake8 black
+          pip install flake8 black mypy pytest
 
       - name: Run flake8
         run: flake8 . --count --show-source --statistics
@@ -28,20 +28,26 @@ jobs:
       - name: Run black
         run: black --check --diff .
 
+      - name: Run mypy
+        run: mypy miwear/ --ignore-missing-imports
+
+      - name: Run pytest
+        run: python -m pytest tests/ -v
+
       - name: Run log.py for test
-        run: ./miwear/log.py ./test/123.tar.gz && ./miwear/log.py ./test/456（1）.tar.gz && ./miwear/log.py ./test/crash_txt.tar.gz
+        run: ./miwear/log.py ./tests/data/123.tar.gz && ./miwear/log.py ./tests/data/456（1）.tar.gz && ./miwear/log.py ./tests/data/crash_txt.tar.gz
 
       - name: Run targz.py for test
-        run: ./miwear/targz.py --path test
+        run: ./miwear/targz.py --path tests/data
 
       - name: Run gz.py for test
-        run: ./miwear/gz.py --path test
+        run: ./miwear/gz.py --path tests/data
 
       - name: Run unzip.py for test
-        run: ./miwear/unzip.py --path test
+        run: ./miwear/unzip.py --path tests/data
 
       - name: Run check
         run: cat 123.log
 
       - name: Run md5sum
-        run: md5sum -c test/123.md5
+        run: md5sum -c tests/data/123.md5

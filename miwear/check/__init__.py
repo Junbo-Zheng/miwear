@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding:UTF-8 -*-
 #
-# Copyright (C) 2025 Junbo Zheng. All rights reserved.
+# Copyright (C) 2026 Junbo Zheng. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,4 +16,6 @@
 # limitations under the License.
 #
 
-__version__ = "0.0.19"
+from miwear.check.__main__ import main
+
+__all__ = ["main"]

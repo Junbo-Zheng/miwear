@@ -19,8 +19,8 @@
 import glob
 import zipfile
 import argparse
-import sys
 import os
+from typing import List
 
 try:
     from miwear import __version__
@@ -28,12 +28,14 @@ except ImportError:
     __version__ = "0.0.1"
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description="Batch extract all ZIP files in the specified directory."
     )
     parser.add_argument(
-        "--version", action="store_true", help="Show miwear_uz version and exit."
+        "--version",
+        action="version",
+        version=f"%(prog)s {__version__}",
     )
     parser.add_argument(
         "--path",
@@ -43,9 +45,6 @@ def main():
     )
 
     args = parser.parse_args()
-    if args.version:
-        print(f"miwear_uz version: {__version__}")
-        sys.exit(0)
 
     # Check if the specified path exists
     if not os.path.exists(args.path):
@@ -53,8 +52,8 @@ def main():
         return
 
     # Get all zip files in the specified directory
-    zip_pattern = os.path.join(args.path, "*.zip")
-    zip_files = glob.glob(zip_pattern)
+    zip_pattern: str = os.path.join(args.path, "*.zip")
+    zip_files: List[str] = glob.glob(zip_pattern)
 
     if not zip_files:
         print(f"No zip files found in '{args.path}'.")

@@ -483,7 +483,7 @@ def start_miniterm(port: str, baudrate: int) -> bool:
         return False
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description="Serial command sender tool - for interacting with serial devices and sending commands",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -509,7 +509,10 @@ Examples:
     )
 
     parser.add_argument(
-        "--version", action="store_true", help="Show version information and exit"
+        "--version",
+        action="version",
+        version=f"%(prog)s {__version__}",
+        help="Show version information and exit",
     )
 
     parser.add_argument(
@@ -578,11 +581,6 @@ Examples:
     )
 
     args = parser.parse_args()
-
-    # Show version information
-    if args.version:
-        print(f"Serial Command Sender v{__version__}")
-        sys.exit(0)
 
     # Handle log file setup
     log_file = None

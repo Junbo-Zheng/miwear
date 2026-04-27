@@ -23,20 +23,22 @@ import os
 import gzip
 import glob
 import re
-import shlex
-import logging as log
+import tarfile
+import logging
 
 import argparse
 from enum import IntEnum
+from typing import List, Optional
 
 try:
     from miwear import __version__
 except ImportError:
     __version__ = "0.0.1"
 
+logger = logging.getLogger(__name__)
 
-log.basicConfig(
-    level=log.DEBUG,
+logging.basicConfig(
+    level=logging.DEBUG,
     datefmt="%Y-%m-%d %H:%M:%S",
     format="%(asctime)-19s.%(msecs)03d %(levelname)-8s %(filename)s %(lineno)-3d %(process)d %(message)s",
 )
@@ -53,32 +55,17 @@ class DefaultCLIParameters:
     special_file_suffix = [".core", ".txt"]
 
 
-class ShellRunner:
-    last_error = ""  # store last command error output
-
-    @staticmethod
-    def command_run(command):
-        result = subprocess.run(
-            command,
-            stdin=sys.stdin,
-            stdout=sys.stdout,
-            stderr=subprocess.PIPE,
-            shell=True,
-        )
-        if result.returncode != 0 and result.stderr:
-            ShellRunner.last_error = result.stderr.decode(
-                "utf-8", errors="replace"
-            ).strip()
-        else:
-            ShellRunner.last_error = ""
-        return result.returncode
+def _chmod_recursive(path: str, mode: int = 0o755) -> None:
+    """Recursively set permissions on a directory tree."""
+    for root, dirs, files in os.walk(path):
+        for d in dirs:
+            os.chmod(os.path.join(root, d), mode)
+        for f in files:
+            os.chmod(os.path.join(root, f), mode)
 
 
 class CLIParametersParser:
-    def __init__(self):
-        # log.debug("Parameter Number :%d", len(sys.argv))
-        # log.debug("Shell Name       :%s", str(sys.argv[0]))
-
+    def __init__(self) -> None:
         arg_parser = argparse.ArgumentParser(
             description="Extract a file with the suffix `.tar.gz` from the source path or remote path and extract to "
             "output_path."
@@ -86,8 +73,8 @@ class CLIParametersParser:
 
         arg_parser.add_argument(
             "--version",
-            action="store_true",
-            help="Show miwear_log version and exit.",
+            action="version",
+            version=f"%(prog)s {__version__}",
         )
 
         arg_parser.add_argument(
@@ -152,24 +139,29 @@ class CLIParametersParser:
             arg_parser.print_help()
             sys.exit(0)
 
-        self.__cli_args = arg_parser.parse_args()
-        if self.__cli_args.version:
-            print("miwear_log version %s" % __version__)
-            sys.exit(0)
+        cli_args = arg_parser.parse_args()
 
-        if self.__cli_args.filename is not None:
-            input_str = self.__cli_args.filename
-        elif self.__cli_args.file_path is not None:
-            input_str = self.__cli_args.file_path
+        if cli_args.filename is not None:
+            input_str = cli_args.filename
+        elif cli_args.file_path is not None:
+            input_str = cli_args.file_path
         else:
             arg_parser.error(
                 "must provide file path via -f/--filename option or positional argument"
             )
             sys.exit(1)
 
+        # Store all needed values as simple instance attributes
+        self.output_path: str = cli_args.output_path
+        self.phone: bool = cli_args.phone
+        self.purge_source_file: bool = cli_args.purge_source_file
+        self.filter_pattern: str = cli_args.filter_pattern
+        self.log_name: str = cli_args.log
+        self.merge_file: Optional[str] = cli_args.merge_file
+
         if os.path.dirname(input_str):
-            self.source_path = [os.path.dirname(os.path.abspath(input_str))]
-            self.filename = [os.path.basename(input_str)]
+            self.source_path: List[str] = [os.path.dirname(os.path.abspath(input_str))]
+            self.filename: List[str] = [os.path.basename(input_str)]
         else:
             self.source_path = [os.getcwd()]
             self.filename = [input_str]
@@ -177,10 +169,10 @@ class CLIParametersParser:
         base_name = self.filename[0]
         if re.search(r"\d+", base_name):
             numbers = re.findall(r"\d+", base_name)
-            log.debug(f"filename number -> {numbers}")
+            logger.debug(f"filename number -> {numbers}")
             if numbers:
                 base_name = numbers[0]
-                log.debug(
+                logger.debug(
                     f"Extracted number '{base_name}' from input '{self.filename[0]}'"
                 )
 
@@ -196,29 +188,20 @@ class CLIParametersParser:
         if self.merge_file is None:
             self.merge_file = os.path.join(os.getcwd(), base_name + ".log")
 
-        log.debug("output_path      :%s", self.output_path)
-        log.debug("source_path      :%s", self.source_path)
-        log.debug("filename         :%s", self.filename)
-        log.debug("purge_source_file:%s", self.purge_source_file)
-        log.debug("merge_file       :%s", self.merge_file)
-
-    def __getattr__(self, item):
-        return self.__cli_args.__getattribute__(item)
-
-    def __setattr__(self, name, value):
-        if name == "_CLIParametersParser__cli_args":
-            super().__setattr__(name, value)
-        else:
-            setattr(self.__cli_args, name, value)
+        logger.debug("output_path      :%s", self.output_path)
+        logger.debug("source_path      :%s", self.source_path)
+        logger.debug("filename         :%s", self.filename)
+        logger.debug("purge_source_file:%s", self.purge_source_file)
+        logger.debug("merge_file       :%s", self.merge_file)
 
 
 class LogTools:
-    def __init__(self, cli_parser):
+    def __init__(self, cli_parser: CLIParametersParser) -> None:
         self.__cli_parser = cli_parser
-        self.log_packet_path = None
-        self.log_dir_path = None
+        self.log_packet_path: Optional[str] = None
+        self.log_dir_path: Optional[str] = None
 
-    def clear_output_dir(self, ask=True):
+    def clear_output_dir(self, ask: bool = True) -> int:
         if not os.path.exists(self.__cli_parser.output_path):
             return 0
 
@@ -229,25 +212,28 @@ class LogTools:
                 % self.__cli_parser.output_path
             )
             if input_str != "Y":
-                log.debug("quit and exit")
+                logger.debug("quit and exit")
                 return -1
-        cmd = "rm -rf " + shlex.quote(self.__cli_parser.output_path)
         # fmt: off
-        log.debug(
-            Highlight.Convert("clear") + " exist file %s by command %s",
+        logger.debug(
+            Highlight.Convert("clear") + " exist file %s",
             self.__cli_parser.output_path,
-            cmd
         )
         # fmt: on
-        return ShellRunner.command_run(cmd)
+        shutil.rmtree(self.__cli_parser.output_path, ignore_errors=True)
+        return 0
 
-    def pull_packet(self):
+    def pull_packet(self) -> int:
         if self.__cli_parser.phone:
-            adb_cmd = (
-                "adb pull " + shlex.quote(DefaultCLIParameters.remote_path) + " ./"
+            adb_cmd = "adb pull " + DefaultCLIParameters.remote_path + " ./"
+            logger.debug(adb_cmd)
+            subprocess.run(
+                adb_cmd,
+                stdin=sys.stdin,
+                stdout=sys.stdout,
+                stderr=subprocess.PIPE,
+                shell=True,
             )
-            log.debug(adb_cmd)
-            ShellRunner.command_run(adb_cmd)
 
             filename = self.__cli_parser.filename[0]
             file = os.getcwd() + "/devicelog/**/" + "*" + filename + "*.tar*.gz"
@@ -268,7 +254,7 @@ class LogTools:
                 result = glob.glob(pattern)
 
         if len(result) == 0:
-            log.error(
+            logger.error(
                 Highlight.Convert(
                     f"Not found file packet, please check source path: {self.__cli_parser.source_path}",
                     Highlight.RED,
@@ -277,7 +263,7 @@ class LogTools:
             return -1
 
         # fmt: off
-        log.debug(
+        logger.debug(
             Highlight.Convert("pull") + " %s from %s",
             result,
             self.__cli_parser.source_path[0]
@@ -305,32 +291,34 @@ class LogTools:
         output = os.path.join(path, output)
 
         if self.__cli_parser.purge_source_file:
-            log.debug("rename to %s", output)
+            logger.debug("rename to %s", output)
             os.rename(file, output)
         else:
-            log.debug("copy to %s", output)
+            logger.debug("copy to %s", output)
             shutil.copyfile(file, output)
         if output is None:
-            log.error(
+            logger.error(
                 Highlight.Convert(f"Not found file packet in {file}", Highlight.RED)
             )
             return -1
 
         self.log_packet_path = output
 
-        log.debug("output file %s", self.log_packet_path)
+        logger.debug("output file %s", self.log_packet_path)
         return 0
 
-    def __find_logfiles_path__(self):
+    def __find_logfiles_path__(self) -> int:
         for root, dirs, files in os.walk(self.__cli_parser.output_path):
             for file in files:
-                if file == self.__cli_parser.log:
+                if file == self.__cli_parser.log_name:
                     self.log_dir_path = os.path.abspath(root)
                     return 0
         return -1
 
-    def __find_special_files(self):
-        special_files = []
+    def __find_special_files(self) -> List[str]:
+        if self.log_dir_path is None:
+            return []
+        special_files: List[str] = []
         for root, dirs, files in os.walk(self.log_dir_path):
             for file in files:
                 # Check if the file ends with any suffix in special_file_suffix
@@ -339,16 +327,20 @@ class LogTools:
                         special_files.append(os.path.join(root, file))
         return special_files
 
-    def __remove_all_suffix_gz_file__(self):
+    def __remove_all_suffix_gz_file__(self) -> int:
+        if self.log_dir_path is None:
+            return 0
         for root, dirs, files in os.walk(self.log_dir_path):
             for file in files:
                 if os.path.splitext(file)[-1] == ".gz":
                     os.remove(os.path.join(root, file))
         return 0
 
-    def __gunzip_all__(self):
+    def __gunzip_all__(self) -> int:
+        if self.log_dir_path is None:
+            return -1
         if not os.path.exists(self.log_dir_path):
-            log.error(
+            logger.error(
                 Highlight.Convert(
                     f"Not found log directory: {self.log_dir_path}", Highlight.RED
                 )
@@ -368,29 +360,29 @@ class LogTools:
                             f.write(gzip_file.read())
 
                 except EOFError as e:
-                    log.error(f"file {file} maybe error, code: {e}")
+                    logger.error(f"file {file} maybe error, code: {e}")
                     continue
                 except Exception as e:
-                    log.error(f"file {file} error: {e}")
+                    logger.error(f"file {file} error: {e}")
                     continue
-        log.debug(Highlight.Convert("gunzip") + " all done")
+        logger.debug(Highlight.Convert("gunzip") + " all done")
         return 0
 
-    def extract_special_files(self):
+    def extract_special_files(self) -> int:
         special_files = self.__find_special_files()
         if not special_files:
-            log.debug("No special files found")
+            logger.debug("No special files found")
             return 0
 
-        log.debug("Special files found:")
+        logger.debug("Special files found:")
         for special_file in special_files:
-            log.debug(f"  -> {special_file}")
+            logger.debug(f"  -> {special_file}")
             des_path = os.path.join(os.getcwd(), os.path.basename(special_file))
-            log.debug(f"Copying {special_file} to {des_path}")
+            logger.debug(f"Copying {special_file} to {des_path}")
             shutil.copy(special_file, des_path)
         return 0
 
-    def __is_gzip_file__(self, filepath):
+    def __is_gzip_file__(self, filepath: str) -> bool:
         try:
             with open(filepath, "rb") as f:
                 magic = f.read(2)
@@ -398,50 +390,45 @@ class LogTools:
         except Exception:
             return False
 
-    def extract_packet(self):
+    def extract_packet(self) -> int:
         if not os.path.exists(self.__cli_parser.output_path):
             os.makedirs(self.__cli_parser.output_path)
 
+        assert self.log_packet_path is not None
+
         if self.__is_gzip_file__(self.log_packet_path):
-            cmd = "gzip -d " + shlex.quote(self.log_packet_path)
-            log.debug(Highlight.Convert("gzip") + " by command " + cmd)
-            ShellRunner.command_run(cmd)
+            # Decompress gzip using Python stdlib
+            logger.debug(
+                Highlight.Convert("gzip") + " decompress " + self.log_packet_path
+            )
             tar_package = self.log_packet_path.replace(".gz", "")
+            try:
+                with gzip.open(self.log_packet_path, "rb") as f_in:
+                    with open(tar_package, "wb") as f_out:
+                        f_out.write(f_in.read())
+                os.remove(self.log_packet_path)
+            except Exception as e:
+                logger.error(
+                    Highlight.Convert(f"gzip decompress failed: {e}", Highlight.RED)
+                )
+                return -1
         else:
-            log.debug(
+            logger.debug(
                 Highlight.Convert("skip gzip")
                 + " - file is not gzip compressed, treating as tar archive"
             )
             tar_package = self.log_packet_path
 
-        cmd = (
-            "tar -xvf "
-            + shlex.quote(tar_package)
-            + " -C "
-            + shlex.quote(self.__cli_parser.output_path)
-        )
-        log.debug(Highlight.Convert("tar") + " by command " + cmd)
-
-        if ShellRunner.command_run(cmd) != 0:
-            error_msg = ShellRunner.last_error or "unknown error"
-            log.error(
-                Highlight.Convert(
-                    f"Command failed:\n  Command: {cmd}\n  Error: {error_msg}",
-                    Highlight.RED,
-                )
-            )
+        # Extract tar using Python stdlib
+        logger.debug(Highlight.Convert("tar") + " extract " + tar_package)
+        try:
+            with tarfile.open(tar_package) as tar:
+                tar.extractall(self.__cli_parser.output_path)
+        except tarfile.TarError as e:
+            logger.error(Highlight.Convert(f"tar extract failed: {e}", Highlight.RED))
             return -1
 
-        cmd = "chmod -R 755" + " " + shlex.quote(self.__cli_parser.output_path)
-        if ShellRunner.command_run(cmd) != 0:
-            error_msg = ShellRunner.last_error or "unknown error"
-            log.error(
-                Highlight.Convert(
-                    f"Command failed:\n  Command: {cmd}\n  Error: {error_msg}",
-                    Highlight.RED,
-                )
-            )
-            return -1
+        _chmod_recursive(self.__cli_parser.output_path)
 
         if (
             tar_package != self.log_packet_path
@@ -461,37 +448,40 @@ class LogTools:
         return self.__remove_all_suffix_gz_file__()
 
     # merge all file to a new file
-    def merge_logfiles(self):
+    def merge_logfiles(self) -> bool:
+        if self.log_dir_path is None:
+            return False
+        assert self.__cli_parser.merge_file is not None
         file_list = os.listdir(self.log_dir_path)
         file_list.sort(key=lambda name: (len(name), name))
-        log.debug(Highlight.Convert("merge") + " file list %s", file_list)
+        logger.debug(Highlight.Convert("merge") + " file list %s", file_list)
 
         if os.path.exists(self.__cli_parser.merge_file):
-            log.debug("merge file exist, will remove")
+            logger.debug("merge file exist, will remove")
             os.remove(self.__cli_parser.merge_file)
 
-        files_to_merge = []
+        files_to_merge: List[str] = []
         for file in file_list:
             if re.match(self.__cli_parser.filter_pattern, file) is None:
                 continue
             files_to_merge.append(os.path.join(self.log_dir_path, file))
 
         if not files_to_merge:
-            log.warning("No files match the pattern to merge")
+            logger.warning("No files match the pattern to merge")
             return False
 
         try:
             with open(self.__cli_parser.merge_file, "wb") as outfile:
                 for file_path in files_to_merge:
-                    log.debug(f"prepare merge file {file_path}")
+                    logger.debug(f"prepare merge file {file_path}")
                     try:
                         with open(file_path, "rb") as f:
                             outfile.write(f.read())
                     except Exception as e:
-                        log.warning(f"Failed to read {file_path}: {e}")
+                        logger.warning(f"Failed to read {file_path}: {e}")
                         continue
 
-            log.debug(
+            logger.debug(
                 "Successfully merged %d files to %s",
                 len(files_to_merge),
                 self.__cli_parser.merge_file,
@@ -499,49 +489,51 @@ class LogTools:
             return True
 
         except Exception as e:
-            log.error(f"Failed to merge files: {e}")
+            logger.error(f"Failed to merge files: {e}")
             return False
 
-    def get_merge_file(self):
+    def get_merge_file(self) -> Optional[str]:
         return self.__cli_parser.merge_file
 
-    def merge_txt_files(self):
+    def merge_txt_files(self) -> bool:
         if self.log_dir_path is None or not os.path.exists(self.log_dir_path):
-            log.warning("Log directory not found, skip merging txt files")
+            logger.warning("Log directory not found, skip merging txt files")
             return False
 
-        txt_files = []
+        assert self.__cli_parser.merge_file is not None
+
+        txt_files: List[str] = []
         for root, dirs, files in os.walk(self.log_dir_path):
             for file in files:
                 if file.lower().startswith("crash") and file.lower().endswith(".txt"):
                     txt_files.append(os.path.join(root, file))
 
         if not txt_files:
-            log.debug("No crash txt files found to merge")
+            logger.debug("No crash txt files found to merge")
             return False
 
         txt_files.sort()
-        log.debug(Highlight.Convert("merge crash txt") + " file list %s", txt_files)
+        logger.debug(Highlight.Convert("merge crash txt") + " file list %s", txt_files)
 
         merge_file_base = os.path.splitext(self.__cli_parser.merge_file)[0]
         txt_merge_file = merge_file_base + ".txt"
 
         if os.path.exists(txt_merge_file):
-            log.debug("txt merge file exists, will remove")
+            logger.debug("txt merge file exists, will remove")
             os.remove(txt_merge_file)
 
         try:
             with open(txt_merge_file, "wb") as outfile:
                 for file_path in txt_files:
-                    log.debug(f"prepare merge crash txt file {file_path}")
+                    logger.debug(f"prepare merge crash txt file {file_path}")
                     try:
                         with open(file_path, "rb") as f:
                             outfile.write(f.read())
                     except Exception as e:
-                        log.warning(f"Failed to read {file_path}: {e}")
+                        logger.warning(f"Failed to read {file_path}: {e}")
                         continue
 
-            log.debug(
+            logger.debug(
                 "Successfully merged %d crash txt files to %s",
                 len(txt_files),
                 txt_merge_file,
@@ -549,13 +541,13 @@ class LogTools:
             return True
 
         except Exception as e:
-            log.error(f"Failed to merge crash txt files: {e}")
+            logger.error(f"Failed to merge crash txt files: {e}")
             return False
 
 
-def CHECK_ERROR_EXIT(ret):
+def check_error_exit(ret: int) -> None:
     if ret:
-        log.error(
+        logger.error(
             Highlight.Convert("Extraction failed with code: " + str(ret), Highlight.RED)
         )
         exit(ret)
@@ -570,25 +562,27 @@ class Highlight(IntEnum):
     WHITE = 37
 
     @staticmethod
-    def Convert(msg, color=BLUE):
+    def Convert(msg: str, color: int = 34) -> str:  # 34 = BLUE
+        if not sys.stderr.isatty():
+            return str(msg)
         return "\033[;%dm%s\033[0m" % (color, msg)
 
 
-def main():
+def main() -> None:
     cli_args = CLIParametersParser()
     logtools = LogTools(cli_args)
 
     # clear exist output dir
-    CHECK_ERROR_EXIT(logtools.clear_output_dir())
+    check_error_exit(logtools.clear_output_dir())
 
     # pull log packet from phone or local, depends on command line parameters
-    CHECK_ERROR_EXIT(logtools.pull_packet())
+    check_error_exit(logtools.pull_packet())
 
     # extract log packet
-    CHECK_ERROR_EXIT(logtools.extract_packet())
+    check_error_exit(logtools.extract_packet())
 
     # extract special file
-    CHECK_ERROR_EXIT(logtools.extract_special_files())
+    check_error_exit(logtools.extract_special_files())
 
     # merge the log files to one file, then remove output dir
     merge_success = logtools.merge_logfiles()
@@ -596,9 +590,11 @@ def main():
     # merge crash txt files before removing output dir
     txt_merge_success = logtools.merge_txt_files()
     if txt_merge_success is True:
-        merge_file_base = os.path.splitext(logtools.get_merge_file())[0]
+        merge_file = logtools.get_merge_file()
+        assert merge_file is not None
+        merge_file_base = os.path.splitext(merge_file)[0]
         txt_merge_file = merge_file_base + ".txt"
-        log.debug(
+        logger.debug(
             Highlight.Convert("crash txt", Highlight.GREEN)
             + f" file at [{txt_merge_file}]"
         )
@@ -606,8 +602,8 @@ def main():
     if merge_success is True:
         logtools.clear_output_dir(False)
 
-    log.debug(Highlight.Convert("Successful", Highlight.GREEN))
-    log.debug(
+    logger.debug(Highlight.Convert("Successful", Highlight.GREEN))
+    logger.debug(
         f"All done, you can take a look now!(log file at [{logtools.get_merge_file()}])"
     )
 

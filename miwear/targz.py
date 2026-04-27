@@ -18,9 +18,8 @@
 
 import os
 import glob
-import subprocess
+import tarfile
 import argparse
-import sys
 
 try:
     from miwear import __version__
@@ -28,12 +27,14 @@ except ImportError:
     __version__ = "0.0.1"
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description="Batch extract all ZIP files in the specified directory."
     )
     parser.add_argument(
-        "--version", action="store_true", help="Show miwear_tz version and exit."
+        "--version",
+        action="version",
+        version=f"%(prog)s {__version__}",
     )
     parser.add_argument(
         "--path",
@@ -43,9 +44,6 @@ def main():
     )
 
     args = parser.parse_args()
-    if args.version:
-        print(f"miwear_tz version: {__version__}")
-        sys.exit(0)
 
     # Check if the specified path exists
     if not os.path.exists(args.path):
@@ -53,7 +51,7 @@ def main():
         return
 
     # Use the specified path instead of current directory
-    target_dir = os.path.abspath(args.path)
+    target_dir: str = os.path.abspath(args.path)
     tar_gz_files = glob.glob(os.path.join(target_dir, "*.tar.gz"))
 
     if not tar_gz_files:
@@ -63,35 +61,16 @@ def main():
     print(f"found {len(tar_gz_files)} .tar.gz files in '{target_dir}'")
 
     for file_path in tar_gz_files:
-        file_name = os.path.basename(file_path)
+        file_name: str = os.path.basename(file_path)
         print(f"extract: {file_name}")
 
         try:
-            result = subprocess.run(
-                ["tar", "-xzvf", file_path],
-                cwd=target_dir,
-                check=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-            )
-            if result.stdout:
-                print(result.stdout)
+            with tarfile.open(file_path, "r:gz") as tar:
+                tar.extractall(target_dir)
             print(f"extract success: {file_name}")
-
-        except subprocess.CalledProcessError as e:
-            if e.returncode == 2 and any(
-                warning in e.stderr
-                for warning in [
-                    "Removing leading `/' from member names",
-                    "decompression OK, trailing garbage ignored",
-                ]
-            ):
-                print("extract success with warning, just ignored")
-            else:
-                print(f"✗ extract failed: {file_name}")
-                print(f"error message: {e.stderr}")
-                print(f"return code: {e.returncode}")
+        except tarfile.TarError as e:
+            print(f"✗ extract failed: {file_name}")
+            print(f"error message: {e}")
 
 
 if __name__ == "__main__":

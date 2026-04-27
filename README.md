@@ -4,16 +4,15 @@ A comprehensive Python Miwear toolkit to extract and process archive log files.
 
 ## Features
 
-- Supports batch extraction of `.tar.gz` , `.zip` and `.gz` files.
+- Supports batch extraction of `.tar.gz`, `.zip` and `.gz` files.
 - Command-line tools for log processing, validation, merging and unzipping.
 - Resource check tool for finding duplicate files, unused resources, and directory comparison, with automatic view variant detection and combined Markdown + HTML reports.
 - Log analyzer for parsing MiWear AppID and screen log entries into CSV or interactive HTML reports.
 - Serial command sender for interacting with serial devices (requires `pyserial`).
-- YMODEM file transfer over serial port (requires `pyserial`).
 - Designed for automation and integration into your workflow.
 - Requires Python >= 3.10.
 - No external dependencies for log processing and resource check tools (pure Python standard libraries).
-- `pyserial` required for serial communication and YMODEM functionality.
+- `pyserial` required for serial communication.
 
 ## Installation
 
@@ -26,7 +25,7 @@ pip(3) install miwear
 If you plan to use the serial command sender tool, also install `pyserial`:
 
 ```bash
-pip(3) install pyserial
+pip(3) install miwear[serial]
 ```
 
 Alternatively, install from source:
@@ -47,7 +46,6 @@ After installation, you get several standalone CLI tools:
 - `miwear_tz` : Specialized extraction for `.tar.gz`.
 - `miwear_uz` : Versatile archive decompression utility.
 - `miwear_serial` : Serial command sender for interacting with serial devices (requires `pyserial`).
-- `miwear_ymodem` : YMODEM file transfer over serial port (requires `pyserial`).
 - `miwear_check` : Resource check tool for finding duplicate files, unused resources, and directory comparison. Generates Markdown + interactive HTML reports.
 - `miwear_loganalyzer` : Log analyzer for MiWear — parses AppID and screen log entries, exports CSV or interactive HTML reports.
 
@@ -102,46 +100,52 @@ miwear_uz --path ./logs
 **Find duplicate files (default mode):**
 
 ```bash
-miwear_check -d ./res -e bin
+miwear_check -d ./resources -e bin
 ```
 
 Scan multiple extensions or filter by file-name prefix:
 
 ```bash
-miwear_check -d ./res -e bin png
-miwear_check -d ./res -e bin -p theme_ config_
+miwear_check -d ./resources -e bin png
+miwear_check -d ./resources -e bin -p theme_ config_
 ```
 
 **Find duplicate files and delete duplicates:**
 
 ```bash
-miwear_check -d ./res -e bin --action delete
+miwear_check -d ./resources -e bin --action delete
 ```
 
-**Auto view variant detection (dup mode):**
+**Auto view variant detection (dup and unused modes):**
 
 When the scan directory contains `view/` and `view_XX/` sub-directories with `res*` sub-directories (e.g., `view/res_480_480`, `view_65/res`), an interactive single-select menu is shown to pick one variant. The default selection is the variant with the most files. Skipped when `-i` is specified manually.
 
 ```bash
-miwear_check -d ./applications -e bin png
+miwear_check -d ./project -e bin png
 ```
 
 **Find unused resources:**
 
-```bash
-miwear_check -m unused -c ./apps -d ./res
-```
+`-d` sets where to find resource files, `-c` sets where to search code references (defaults to `-d` if omitted).
 
-**Find unused resources with path prefix mapping:**
+When the scan directory contains `view/view_XX` sub-directories, an interactive menu is shown to pick one variant. Resources are scanned only from the selected variant.
 
 ```bash
-miwear_check -m unused -c ./apps -d ./res --prefix "/resource/app:"
+# Search all code in ./project for references to resources in ./project
+miwear_check -m unused -d ./project -e bin
+
+# Only search code in ./project/ota, but scan resources from all of ./project
+miwear_check -m unused -d ./project -c ./project/ota -e bin
+
+# Customize code file extensions to scan
+miwear_check -m unused -d ./project -e bin --code-ext ".c,.h,.cpp,.java"
 ```
 
 **Run both checks (duplicate + unused):**
 
 ```bash
-miwear_check -m both -d ./res -c ./apps -e bin
+miwear_check -m both -d ./project -e bin
+miwear_check -m both -d ./project -c ./project/ota -e bin
 ```
 
 **Compare two directories (diff mode):**
@@ -149,28 +153,30 @@ miwear_check -m both -d ./res -c ./apps -e bin
 Compare files between two directories (e.g., design folder with PNG files vs converted folder with BIN files):
 
 ```bash
-miwear_check -m diff --path1 ./design --path2 ./res
+miwear_check -m diff --path1 ./design --path2 ./converted
 ```
 
 Compare specific subdirectories:
 
 ```bash
-miwear_check -m diff --path1 ./design/app --path2 ./res/app
+miwear_check -m diff --path1 ./design/icons --path2 ./converted/icons
 ```
 
-Ignore specific directories:
+Ignore specific directories (comma-separated or repeated `--ignore-dir`):
 
 ```bash
-miwear_check -m diff --path1 ./design --path2 ./res -i .git,node_modules
+miwear_check -m diff --path1 ./design --path2 ./converted -i .git,node_modules
+miwear_check -d ./resources -e bin --ignore-dir po --ignore-dir .git
 ```
 
 Sort directory listing by file count instead of alphabetical:
 
 ```bash
-miwear_check -m diff --path1 ./design --path2 ./res --sort count
+miwear_check -m diff --path1 ./design --path2 ./converted --sort count
 ```
 
 **How diff mode works:**
+
 - Compares files by extracting base name (first part before the first dot) from filenames
 - Example: `confirm.indexed_8.png` and `confirm.bin` both have base name `confirm`, so they match
 - Uses `relative_dir/base_name` as the comparison key, so same filenames in different subdirectories are handled correctly
@@ -179,23 +185,14 @@ miwear_check -m diff --path1 ./design --path2 ./res --sort count
 
 **Report output (Markdown + HTML):**
 
-All modes generate a Markdown report and an accompanying interactive HTML report; you are prompted to open the HTML file in your browser when finished.
+All modes generate a Markdown report and an accompanying interactive HTML report with search, filter, and sort. You are prompted to open the HTML file in your browser when finished.
 
 ```bash
-miwear_check -d ./res -e bin -o my_report.md
-miwear_check -d ./res -e bin --no-output
-miwear_check -m unused -c ./apps -d ./res --code-ext ".c,.h,.cpp,.java"
+miwear_check -d ./resources -e bin -o my_report.md
+miwear_check -d ./resources -e bin --no-output
 ```
 
-### 7. YMODEM File Transfer
-
-Transfer a file via YMODEM over serial port:
-
-```bash
-miwear_ymodem -p /dev/ttyACM0 -b 921600 -f firmware.bin
-```
-
-### 8. Serial Command Sender
+### 7. Serial Command Sender
 
 The `miwear_serial` tool requires the `pyserial` library. Install it with:
 
@@ -281,7 +278,7 @@ miwear_serial -p /dev/ttyACM0 -b 921600
 
 Press Ctrl+] to exit miniterm.
 
-### 9. Log Analyzer
+### 8. Log Analyzer
 
 Parse MiWear log files (AppID entries and screen transitions) and export to CSV or an interactive HTML report.
 

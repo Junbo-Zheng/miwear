@@ -224,7 +224,9 @@ merged.log
 
 *__MACOSX
 
-test/
+# Ignore extracted test artifacts, keep tests/data/ source files
+tests/data/*.log
+tests/data/file/
 
 *.csv
 *.html
