@@ -224,9 +224,15 @@ merged.log
 
 *__MACOSX
 
+# macOS AppleDouble metadata (packed inside tar.gz from macOS)
+._*
+
 # Ignore extracted test artifacts, keep tests/data/ source files
+/crash*.txt
 tests/data/*.log
 tests/data/file/
+tests/data/123/
+tests/data/nxmake2cmake.txt
 
 *.csv
 *.html
