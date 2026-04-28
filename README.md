@@ -1,319 +1,228 @@
-# Python Miwear
+<div align="center">
 
-A comprehensive Python Miwear toolkit to extract and process archive log files.
+# miwear
 
-## Features
+A Python toolkit for extracting, merging, auditing and analyzing MiWear device dumps — from the command line.
 
-- Supports batch extraction of `.tar.gz`, `.zip` and `.gz` files.
-- Command-line tools for log processing, validation, merging and unzipping.
-- Resource check tool for finding duplicate files, unused resources, and directory comparison, with automatic view variant detection and combined Markdown + HTML reports.
-- Log analyzer for parsing MiWear AppID and screen log entries into CSV or interactive HTML reports.
-- Serial command sender for interacting with serial devices (requires `pyserial`).
-- Designed for automation and integration into your workflow.
-- Requires Python >= 3.10.
-- No external dependencies for log processing and resource check tools (pure Python standard libraries).
-- `pyserial` required for serial communication.
+[![PyPI version](https://img.shields.io/pypi/v/miwear.svg)](https://pypi.org/project/miwear/)
+[![Python](https://img.shields.io/pypi/pyversions/miwear.svg)](https://pypi.org/project/miwear/)
+[![License](https://img.shields.io/pypi/l/miwear.svg)](./LICENSE)
+[![Downloads](https://img.shields.io/pypi/dm/miwear.svg)](https://pypi.org/project/miwear/)
+
+</div>
+
+`miwear` bundles eight small, focused command-line tools for the everyday chores of working with MiWear (Xiaomi wearable) device artifacts — unpacking `.tar.gz` / `.zip` / `.gz` bundles, merging rotated logs, extracting assertions, auditing resource directories, parsing runtime log patterns, and driving serial consoles.
+
+Each tool does one thing, takes sensible defaults, and produces human- or machine-readable output (plain text, CSV, Markdown, or interactive HTML).
+
+## Highlights
+
+- **Zero runtime dependencies** for the core tools — pure Python standard library
+- **Batch extraction** for `.tar.gz`, `.zip` and `.gz` archives in a single pass
+- **Log workflow**: pull logs via `adb`, merge rotated shards, extract assertions, filter by pattern
+- **Resource audit**: duplicate detection, unused-asset scan, two-directory diff — with Markdown + interactive HTML reports
+- **Log analyzer** for AppID / screen-transition patterns, exportable to CSV or interactive HTML
+- **Optional serial console** (miniterm, one-shot, periodic, or batch-file modes) via `pyserial`
+- Works on **Python 3.10+**, Linux / macOS / Windows
 
 ## Installation
 
-Install the latest release from `PyPI`:
-
 ```bash
-pip(3) install miwear
+# Core tools
+pip install miwear
+
+# Core + serial console helper
+pip install 'miwear[serial]'
 ```
 
-If you plan to use the serial command sender tool, also install `pyserial`:
+> [!TIP]
+> Every command accepts `--help` for the full option list and `--version` to print the installed version.
+
+## Quick start
 
 ```bash
-pip(3) install miwear[serial]
-```
-
-Alternatively, install from source:
-
-```bash
-git clone https://github.com/Junbo-Zheng/miwear
-cd miwear
-pip install .
-```
-
-## Command-Line Tools
-
-After installation, you get several standalone CLI tools:
-
-- `miwear_log` : Main utility for extracting archive files.
-- `miwear_assert` : Extract assertion information from logs.
-- `miwear_gz` : Unzip and merge `.gz` log files.
-- `miwear_tz` : Specialized extraction for `.tar.gz`.
-- `miwear_uz` : Versatile archive decompression utility.
-- `miwear_serial` : Serial command sender for interacting with serial devices (requires `pyserial`).
-- `miwear_check` : Resource check tool for finding duplicate files, unused resources, and directory comparison. Generates Markdown + interactive HTML reports.
-- `miwear_loganalyzer` : Log analyzer for MiWear — parses AppID and screen log entries, exports CSV or interactive HTML reports.
-
-## Usage Examples
-
-### 1. Main Extraction Utility
-
-**Method 1: Using positional argument (recommended)**
-
-```bash
+# Extract and merge a device log bundle downloaded from the phone
 miwear_log ~/Downloads/log.tar.gz
+
+# Or pull straight from a connected Android device via adb
+miwear_log --phone -f 123456_abc
+
+# Audit a resources directory for duplicates and open an HTML report
+miwear_check -d ./resources -e bin
 ```
 
-**Method 2: Using -f option**
+## Commands
+
+| Command              | Purpose                                                                       | Docs                                   |
+| -------------------- | ----------------------------------------------------------------------------- | -------------------------------------- |
+| `miwear_log`         | Extract a MiWear log archive and merge its contents into a single log file    | [↓](#miwear_log)                       |
+| `miwear_assert`      | Extract assertion information from a log                                      | [↓](#miwear_assert)                    |
+| `miwear_gz`          | Decompress and merge `.gz` log shards                                         | [↓](#miwear_gz)                        |
+| `miwear_tz`          | Batch-extract `.tar.gz` archives in a directory                               | [↓](#miwear_tz--miwear_uz)             |
+| `miwear_uz`          | Batch-extract `.zip` archives in a directory                                  | [↓](#miwear_tz--miwear_uz)             |
+| `miwear_check`       | Resource audit — duplicates, unused assets, directory diff                    | [↓](#miwear_check)                     |
+| `miwear_loganalyzer` | Parse AppID / screen log patterns into CSV or interactive HTML                | [↓](#miwear_loganalyzer)               |
+| `miwear_serial`      | Serial console helper (requires `pyserial`)                                   | [↓](#miwear_serial)                    |
+
+## Usage
+
+### `miwear_log`
+
+Extract a log bundle and merge its shards into one file.
 
 ```bash
+# Positional path (recommended)
+miwear_log ~/Downloads/log.tar.gz
+
+# Explicit -f flag
 miwear_log -f ~/Downloads/log.tar.gz
-```
 
-**Pull from Android phone via adb:**
-
-```bash
+# Pull straight from an Android phone via adb
 miwear_log --phone -f 123456_abc
 ```
 
-### 2. Assertion Log Parser
+### `miwear_assert`
+
+Extract assertion blocks from a merged log.
 
 ```bash
 miwear_assert -i mi.log -o assert_log.txt
 ```
 
-### 3. GZ Log Merger
+### `miwear_gz`
+
+Decompress and concatenate all `.gz` shards in a directory.
 
 ```bash
 miwear_gz --path ./logs --log_file my.log --output_file merged.log
 ```
 
-### 4. Targz Extraction
+### `miwear_tz` / `miwear_uz`
+
+Batch extract every archive in a directory.
 
 ```bash
-miwear_tz --path ./logs
+miwear_tz --path ./logs     # *.tar.gz
+miwear_uz --path ./logs     # *.zip
 ```
 
-### 5. Unzip Utility
+### `miwear_check`
 
-```bash
-miwear_uz --path ./logs
-```
+Three audit modes: **duplicates** (default), **unused** assets, and **diff** between two directories. All modes emit a Markdown + interactive HTML report with search / filter / sort.
 
-### 6. Resource Check Tool
-
-**Find duplicate files (default mode):**
+<details>
+<summary><b>Duplicate detection</b></summary>
 
 ```bash
 miwear_check -d ./resources -e bin
-```
-
-Scan multiple extensions or filter by file-name prefix:
-
-```bash
 miwear_check -d ./resources -e bin png
 miwear_check -d ./resources -e bin -p theme_ config_
-```
-
-**Find duplicate files and delete duplicates:**
-
-```bash
 miwear_check -d ./resources -e bin --action delete
 ```
+</details>
 
-**Auto view variant detection (dup and unused modes):**
+<details>
+<summary><b>Unused resource scan</b></summary>
 
-When the scan directory contains `view/` and `view_XX/` sub-directories with `res*` sub-directories (e.g., `view/res_480_480`, `view_65/res`), an interactive single-select menu is shown to pick one variant. The default selection is the variant with the most files. Skipped when `-i` is specified manually.
-
-```bash
-miwear_check -d ./project -e bin png
-```
-
-**Find unused resources:**
-
-`-d` sets where to find resource files, `-c` sets where to search code references (defaults to `-d` if omitted).
-
-When the scan directory contains `view/view_XX` sub-directories, an interactive menu is shown to pick one variant. Resources are scanned only from the selected variant.
+`-d` sets where resources live; `-c` sets where to look for references (defaults to `-d`).
 
 ```bash
-# Search all code in ./project for references to resources in ./project
 miwear_check -m unused -d ./project -e bin
-
-# Only search code in ./project/ota, but scan resources from all of ./project
 miwear_check -m unused -d ./project -c ./project/ota -e bin
-
-# Customize code file extensions to scan
 miwear_check -m unused -d ./project -e bin --code-ext ".c,.h,.cpp,.java"
-```
 
-**Run both checks (duplicate + unused):**
-
-```bash
+# Run duplicate + unused together
 miwear_check -m both -d ./project -e bin
-miwear_check -m both -d ./project -c ./project/ota -e bin
 ```
+</details>
 
-**Compare two directories (diff mode):**
+<details>
+<summary><b>Two-directory diff</b></summary>
 
-Compare files between two directories (e.g., design folder with PNG files vs converted folder with BIN files):
+Matches files by base name (everything before the first dot) under the same relative path — so `confirm.indexed_8.png` and `confirm.bin` pair up automatically.
 
 ```bash
 miwear_check -m diff --path1 ./design --path2 ./converted
-```
-
-Compare specific subdirectories:
-
-```bash
-miwear_check -m diff --path1 ./design/icons --path2 ./converted/icons
-```
-
-Ignore specific directories (comma-separated or repeated `--ignore-dir`):
-
-```bash
 miwear_check -m diff --path1 ./design --path2 ./converted -i .git,node_modules
-miwear_check -d ./resources -e bin --ignore-dir po --ignore-dir .git
-```
-
-Sort directory listing by file count instead of alphabetical:
-
-```bash
 miwear_check -m diff --path1 ./design --path2 ./converted --sort count
 ```
+</details>
 
-**How diff mode works:**
-
-- Compares files by extracting base name (first part before the first dot) from filenames
-- Example: `confirm.indexed_8.png` and `confirm.bin` both have base name `confirm`, so they match
-- Uses `relative_dir/base_name` as the comparison key, so same filenames in different subdirectories are handled correctly
-- Reports files only in path1 (missing in path2), files only in path2 (extra), and common files
-- Shows per-directory file count statistics for both paths
-
-**Report output (Markdown + HTML):**
-
-All modes generate a Markdown report and an accompanying interactive HTML report with search, filter, and sort. You are prompted to open the HTML file in your browser when finished.
+<details>
+<summary><b>Report output</b></summary>
 
 ```bash
 miwear_check -d ./resources -e bin -o my_report.md
 miwear_check -d ./resources -e bin --no-output
 ```
+</details>
 
-### 7. Serial Command Sender
+> [!NOTE]
+> When the scan directory contains both `view/` and `view_XX/res*` variants, `miwear_check` prompts you to pick one (default: the variant with the most files). Pass `-i` to skip the prompt.
 
-The `miwear_serial` tool requires the `pyserial` library. Install it with:
+### `miwear_loganalyzer`
 
-```bash
-pip(3) install pyserial
-```
-
-#### Basic Usage
-
-Open miniterm terminal (default behavior):
+Parse MiWear runtime log patterns and export CSV or HTML.
 
 ```bash
-miwear_serial -p /dev/ttyACM0 -b 921600
-```
-
-Send a single command:
-
-```bash
-miwear_serial -p /dev/ttyUSB1 -b 115200 -c "ps"
-```
-
-Send a single command with response processing:
-
-```bash
-miwear_serial -p /dev/ttyUSB1 -b 115200 -c "ps" -r
-```
-
-#### Periodic Command Sending
-
-Send command every 1 second:
-
-```bash
-miwear_serial -p /dev/ttyACM1 -i 1.0 -c "ps"
-```
-
-Send command 5 times with 2-second interval:
-
-```bash
-miwear_serial -p /dev/ttyACM1 -i 2.0 -c "ps" --count 5
-```
-
-#### Batch Command Execution
-
-Send batch commands from file once:
-
-```bash
-miwear_serial -f commands.txt
-```
-
-Send batch commands every 2 seconds:
-
-```bash
-miwear_serial -f commands.txt -i 2.0
-```
-
-Send batch commands 5 times, every 2 seconds:
-
-```bash
-miwear_serial -f commands.txt -i 2.0 --count 5
-```
-
-#### Logging
-
-Save all output to log file (default: miwear.log):
-
-```bash
-miwear_serial -p /dev/ttyACM0 -b 921600 -s
-```
-
-Save to specific log file:
-
-```bash
-miwear_serial -p /dev/ttyACM0 -b 921600 -s log.txt
-```
-
-#### Interactive Mode
-
-For interactive command sending, use miniterm (default when no command specified):
-
-```bash
-miwear_serial -p /dev/ttyACM0 -b 921600
-```
-
-Press Ctrl+] to exit miniterm.
-
-### 8. Log Analyzer
-
-Parse MiWear log files (AppID entries and screen transitions) and export to CSV or an interactive HTML report.
-
-Analyze all supported patterns (default) and write to `miwear.csv`:
-
-```bash
+# Default: all analyzers → miwear.csv
 miwear_loganalyzer -f 1.log
-```
 
-Export an interactive HTML report and open it in the browser:
-
-```bash
+# Interactive HTML report (opens in browser)
 miwear_loganalyzer -f 1.log --html --open-browser
-```
 
-Pick a specific analyzer (`appid`, `screen`, or `all`):
-
-```bash
+# Run a single analyzer
 miwear_loganalyzer -f 1.log -t appid
 miwear_loganalyzer -f 1.log -t screen -o screens.csv
 ```
 
-**Each tool includes a `--help` option to display supported parameters and usage:**
+### `miwear_serial`
+
+> [!IMPORTANT]
+> Requires `pyserial`. Install with `pip install 'miwear[serial]'`.
+
+<details>
+<summary><b>Interactive session</b></summary>
 
 ```bash
-miwear_log --help
-miwear_assert --help
-...
+miwear_serial -p /dev/ttyACM0 -b 921600
+# Press Ctrl+] to exit
 ```
+</details>
 
-## License
+<details>
+<summary><b>One-shot command</b></summary>
 
-Apache License 2.0
+```bash
+miwear_serial -p /dev/ttyUSB1 -b 115200 -c "ps"
+miwear_serial -p /dev/ttyUSB1 -b 115200 -c "ps" -r   # parse response
+```
+</details>
 
-## Author and E-mail
+<details>
+<summary><b>Periodic / batch</b></summary>
 
-- Junbo Zheng
-- E-mail: 3273070@qq.com
+```bash
+# Repeat on a timer
+miwear_serial -p /dev/ttyACM1 -i 1.0 -c "ps"
+miwear_serial -p /dev/ttyACM1 -i 2.0 -c "ps" --count 5
+
+# Batch commands from a file
+miwear_serial -f commands.txt
+miwear_serial -f commands.txt -i 2.0 --count 5
+```
+</details>
+
+<details>
+<summary><b>Record to a log file</b></summary>
+
+```bash
+miwear_serial -p /dev/ttyACM0 -b 921600 -s              # miwear.log (default)
+miwear_serial -p /dev/ttyACM0 -b 921600 -s log.txt      # custom path
+```
+</details>
+
+## Requirements
+
+- Python **3.10+**
+- `pyserial` (only for `miwear_serial`)

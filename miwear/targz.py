@@ -66,6 +66,11 @@ def main() -> None:
 
         try:
             with tarfile.open(file_path, "r:gz") as tar:
+                # Strip leading '/' to match `tar -xvf`'s default behavior;
+                # otherwise absolute member paths escape target_dir via
+                # os.path.join() and hit "Permission denied" at the FS root.
+                for member in tar.getmembers():
+                    member.name = member.name.lstrip("/")
                 tar.extractall(target_dir)
             print(f"extract success: {file_name}")
         except tarfile.TarError as e:

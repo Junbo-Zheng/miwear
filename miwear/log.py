@@ -423,6 +423,11 @@ class LogTools:
         logger.debug(Highlight.Convert("tar") + " extract " + tar_package)
         try:
             with tarfile.open(tar_package) as tar:
+                # Strip leading '/' to match `tar -xvf`'s default behavior;
+                # otherwise absolute member paths escape output_path via
+                # os.path.join() and hit "Permission denied" at the FS root.
+                for member in tar.getmembers():
+                    member.name = member.name.lstrip("/")
                 tar.extractall(self.__cli_parser.output_path)
         except tarfile.TarError as e:
             logger.error(Highlight.Convert(f"tar extract failed: {e}", Highlight.RED))
