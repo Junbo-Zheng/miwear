@@ -1,6 +1,6 @@
 <div align="center">
 
-# miwear
+# OpenMiwear
 
 A Python toolkit for extracting, merging, auditing and analyzing MiWear device dumps — from the command line.
 
@@ -8,24 +8,27 @@ A Python toolkit for extracting, merging, auditing and analyzing MiWear device d
 [![Python](https://img.shields.io/pypi/pyversions/miwear.svg)](https://pypi.org/project/miwear/)
 [![License](https://img.shields.io/pypi/l/miwear.svg)](./LICENSE)
 [![Downloads](https://img.shields.io/pypi/dm/miwear.svg)](https://pypi.org/project/miwear/)
+[![CI](https://github.com/Junbo-Zheng/OpenMiwear/actions/workflows/lint.yml/badge.svg)](https://github.com/Junbo-Zheng/OpenMiwear/actions/workflows/lint.yml)
 
 </div>
 
-`miwear` bundles eight small, focused command-line tools for the everyday chores of working with MiWear (Xiaomi wearable) device artifacts — unpacking `.tar.gz` / `.zip` / `.gz` bundles, merging rotated logs, extracting assertions, auditing resource directories, parsing runtime log patterns, and driving serial consoles.
+**OpenMiwear** is a set of small, focused command-line tools for the everyday chores of working with MiWear (Xiaomi wearable) device artifacts — unpacking `.tar.gz` / `.zip` / `.gz` bundles, merging rotated logs, extracting assertions, auditing resource directories, analyzing runtime log patterns, and driving serial consoles.
 
 Each tool does one thing, takes sensible defaults, and produces human- or machine-readable output (plain text, CSV, Markdown, or interactive HTML).
 
-## Highlights
+## Features
 
-- **Zero runtime dependencies** for the core tools — pure Python standard library
-- **Batch extraction** for `.tar.gz`, `.zip` and `.gz` archives in a single pass
-- **Log workflow**: pull logs via `adb`, merge rotated shards, extract assertions, filter by pattern
-- **Resource audit**: duplicate detection, unused-asset scan, two-directory diff — with Markdown + interactive HTML reports
-- **Log analyzer** for AppID / screen-transition patterns, exportable to CSV or interactive HTML
-- **Optional serial console** (miniterm, one-shot, periodic, or batch-file modes) via `pyserial`
-- Works on **Python 3.10+**, Linux / macOS / Windows
+- **Zero runtime dependencies** for the core tools — pure Python standard library.
+- **Batch extraction** of `.tar.gz`, `.zip` and `.gz` archives in a single pass.
+- **Log workflow**: pull logs over `adb`, merge rotated shards, extract assertions, filter by pattern.
+- **Resource audit**: duplicate detection, unused-asset scan, two-directory diff — with Markdown + interactive HTML reports.
+- **Log analyzer** for AppID / screen-transition patterns, exportable to CSV or interactive HTML.
+- **Optional serial console** (miniterm, one-shot, periodic, batch-file) via `pyserial`.
+- Works on **Python 3.10+**, Linux / macOS / Windows.
 
 ## Installation
+
+Published on PyPI as the [`miwear`](https://pypi.org/project/miwear/) package:
 
 ```bash
 # Core tools
@@ -41,7 +44,7 @@ pip install 'miwear[serial]'
 ## Quick start
 
 ```bash
-# Extract and merge a device log bundle downloaded from the phone
+# Extract and merge a device log bundle
 miwear_log ~/Downloads/log.tar.gz
 
 # Or pull straight from a connected Android device via adb
@@ -53,16 +56,16 @@ miwear_check -d ./resources -e bin
 
 ## Commands
 
-| Command              | Purpose                                                                       | Docs                                   |
-| -------------------- | ----------------------------------------------------------------------------- | -------------------------------------- |
-| `miwear_log`         | Extract a MiWear log archive and merge its contents into a single log file    | [↓](#miwear_log)                       |
-| `miwear_assert`      | Extract assertion information from a log                                      | [↓](#miwear_assert)                    |
-| `miwear_gz`          | Decompress and merge `.gz` log shards                                         | [↓](#miwear_gz)                        |
-| `miwear_tz`          | Batch-extract `.tar.gz` archives in a directory                               | [↓](#miwear_tz--miwear_uz)             |
-| `miwear_uz`          | Batch-extract `.zip` archives in a directory                                  | [↓](#miwear_tz--miwear_uz)             |
-| `miwear_check`       | Resource audit — duplicates, unused assets, directory diff                    | [↓](#miwear_check)                     |
-| `miwear_loganalyzer` | Parse AppID / screen log patterns into CSV or interactive HTML                | [↓](#miwear_loganalyzer)               |
-| `miwear_serial`      | Serial console helper (requires `pyserial`)                                   | [↓](#miwear_serial)                    |
+| Command              | Purpose                                                                    |
+| -------------------- | -------------------------------------------------------------------------- |
+| `miwear_log`         | Extract a MiWear log archive and merge its shards into a single log file   |
+| `miwear_assert`      | Extract assertion blocks from a log                                        |
+| `miwear_gz`          | Decompress and merge `.gz` log shards                                      |
+| `miwear_tz`          | Batch-extract every `.tar.gz` archive in a directory                       |
+| `miwear_uz`          | Batch-extract every `.zip` archive in a directory                          |
+| `miwear_check`       | Resource audit — duplicates, unused assets, directory diff                 |
+| `miwear_loganalyzer` | Parse AppID / screen log patterns into CSV or interactive HTML             |
+| `miwear_serial`      | Serial console helper (requires `pyserial`)                                |
 
 ## Usage
 
@@ -74,7 +77,7 @@ Extract a log bundle and merge its shards into one file.
 # Positional path (recommended)
 miwear_log ~/Downloads/log.tar.gz
 
-# Explicit -f flag
+# Or with -f / --filename
 miwear_log -f ~/Downloads/log.tar.gz
 
 # Pull straight from an Android phone via adb
@@ -99,7 +102,7 @@ miwear_gz --path ./logs --log_file my.log --output_file merged.log
 
 ### `miwear_tz` / `miwear_uz`
 
-Batch extract every archive in a directory.
+Batch-extract every archive in a directory.
 
 ```bash
 miwear_tz --path ./logs     # *.tar.gz
@@ -108,7 +111,7 @@ miwear_uz --path ./logs     # *.zip
 
 ### `miwear_check`
 
-Three audit modes: **duplicates** (default), **unused** assets, and **diff** between two directories. All modes emit a Markdown + interactive HTML report with search / filter / sort.
+Four modes: **dup** (default), **unused**, **both**, and **diff**. All modes emit Markdown + interactive HTML reports with search / filter / sort.
 
 <details>
 <summary><b>Duplicate detection</b></summary>
@@ -119,6 +122,7 @@ miwear_check -d ./resources -e bin png
 miwear_check -d ./resources -e bin -p theme_ config_
 miwear_check -d ./resources -e bin --action delete
 ```
+
 </details>
 
 <details>
@@ -134,6 +138,7 @@ miwear_check -m unused -d ./project -e bin --code-ext ".c,.h,.cpp,.java"
 # Run duplicate + unused together
 miwear_check -m both -d ./project -e bin
 ```
+
 </details>
 
 <details>
@@ -146,6 +151,7 @@ miwear_check -m diff --path1 ./design --path2 ./converted
 miwear_check -m diff --path1 ./design --path2 ./converted -i .git,node_modules
 miwear_check -m diff --path1 ./design --path2 ./converted --sort count
 ```
+
 </details>
 
 <details>
@@ -155,6 +161,7 @@ miwear_check -m diff --path1 ./design --path2 ./converted --sort count
 miwear_check -d ./resources -e bin -o my_report.md
 miwear_check -d ./resources -e bin --no-output
 ```
+
 </details>
 
 > [!NOTE]
@@ -162,7 +169,7 @@ miwear_check -d ./resources -e bin --no-output
 
 ### `miwear_loganalyzer`
 
-Parse MiWear runtime log patterns and export CSV or HTML.
+Parse MiWear runtime log patterns and export to CSV or HTML.
 
 ```bash
 # Default: all analyzers → miwear.csv
@@ -188,6 +195,7 @@ miwear_loganalyzer -f 1.log -t screen -o screens.csv
 miwear_serial -p /dev/ttyACM0 -b 921600
 # Press Ctrl+] to exit
 ```
+
 </details>
 
 <details>
@@ -197,6 +205,7 @@ miwear_serial -p /dev/ttyACM0 -b 921600
 miwear_serial -p /dev/ttyUSB1 -b 115200 -c "ps"
 miwear_serial -p /dev/ttyUSB1 -b 115200 -c "ps" -r   # parse response
 ```
+
 </details>
 
 <details>
@@ -211,18 +220,37 @@ miwear_serial -p /dev/ttyACM1 -i 2.0 -c "ps" --count 5
 miwear_serial -f commands.txt
 miwear_serial -f commands.txt -i 2.0 --count 5
 ```
+
 </details>
 
 <details>
 <summary><b>Record to a log file</b></summary>
 
 ```bash
-miwear_serial -p /dev/ttyACM0 -b 921600 -s              # miwear.log (default)
-miwear_serial -p /dev/ttyACM0 -b 921600 -s log.txt      # custom path
+miwear_serial -p /dev/ttyACM0 -b 921600 -s             # miwear.log (default)
+miwear_serial -p /dev/ttyACM0 -b 921600 -s log.txt     # custom path
 ```
+
 </details>
 
 ## Requirements
 
 - Python **3.10+**
-- `pyserial` (only for `miwear_serial`)
+- `pyserial` — only for `miwear_serial`
+
+## Development
+
+Clone the repo and run the full lint + test + integration suite that mirrors CI:
+
+```bash
+git clone https://github.com/Junbo-Zheng/OpenMiwear.git
+cd OpenMiwear
+
+pip install flake8 black mypy pytest
+./build.sh
+```
+
+`build.sh` runs `flake8`, `black --check`, `mypy`, `pytest`, and then exercises each CLI against the fixtures in `tests/data/`. GitHub Actions runs the same steps on every push and pull request via [`.github/workflows/lint.yml`](./.github/workflows/lint.yml).
+
+> [!NOTE]
+> The repository on GitHub is `Junbo-Zheng/OpenMiwear`, but the PyPI distribution and Python import/command names use the shorter **`miwear`** identifier (e.g. `import miwear`, `miwear_log …`). This is intentional — keep the project name **OpenMiwear** when referring to the repo, and the package name `miwear` when invoking the tools.
