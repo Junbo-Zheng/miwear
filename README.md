@@ -63,6 +63,7 @@ miwear_check -d ./resources -e bin
 | `miwear_gz`          | Decompress and merge `.gz` log shards                                      |
 | `miwear_tz`          | Batch-extract every `.tar.gz` archive in a directory                       |
 | `miwear_uz`          | Batch-extract every `.zip` archive in a directory                          |
+| `miwear_extract`     | Pull files with specific extensions out of a ZIP archive                   |
 | `miwear_check`       | Resource audit — duplicates, unused assets, directory diff                 |
 | `miwear_loganalyzer` | Parse AppID / screen log patterns into CSV or interactive HTML             |
 | `miwear_serial`      | Serial console helper (requires `pyserial`)                                |
@@ -107,6 +108,18 @@ Batch-extract every archive in a directory.
 ```bash
 miwear_tz --path ./logs     # *.tar.gz
 miwear_uz --path ./logs     # *.zip
+```
+
+### `miwear_extract`
+
+Pull files with specific extensions out of a ZIP archive into an output directory, without performing a full extraction. If no ZIP is given, the current directory is scanned and you pick one interactively.
+
+```bash
+# Auto-detect a ZIP in the current directory, extract *.bin (default)
+miwear_extract
+
+# Explicit archive, multiple extensions, custom output directory
+miwear_extract firmware.zip -e bin hex -o ./out
 ```
 
 ### `miwear_check`
