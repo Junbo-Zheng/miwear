@@ -8,7 +8,7 @@ A Python toolkit for extracting, merging, auditing and analyzing MiWear device d
 [![Python](https://img.shields.io/pypi/pyversions/miwear.svg)](https://pypi.org/project/miwear/)
 [![License](https://img.shields.io/pypi/l/miwear.svg)](./LICENSE)
 [![Downloads](https://img.shields.io/pypi/dm/miwear.svg)](https://pypi.org/project/miwear/)
-[![CI](https://github.com/Junbo-Zheng/OpenMiwear/actions/workflows/lint.yml/badge.svg)](https://github.com/Junbo-Zheng/OpenMiwear/actions/workflows/lint.yml)
+[![CI](https://github.com/Junbo-Zheng/OpenMiwear/actions/workflows/ci.yml/badge.svg)](https://github.com/Junbo-Zheng/OpenMiwear/actions/workflows/ci.yml)
 
 </div>
 
@@ -263,7 +263,9 @@ pip install flake8 black mypy pytest
 ./build.sh
 ```
 
-`build.sh` runs `flake8`, `black --check`, `mypy`, `pytest`, and then exercises each CLI against the fixtures in `tests/data/`. GitHub Actions runs the same steps on every push and pull request via [`.github/workflows/lint.yml`](./.github/workflows/lint.yml).
+`build.sh` runs `flake8`, `black --check`, `mypy`, `pytest`, and then exercises each CLI against the fixtures in `tests/data/`. GitHub Actions mirrors this on every push and pull request via [`.github/workflows/ci.yml`](./.github/workflows/ci.yml), with the `test` job running against a Python 3.10 / 3.11 / 3.12 / 3.13 matrix.
+
+Releases are automated through [`.github/workflows/publish.yml`](./.github/workflows/publish.yml): publishing a GitHub Release triggers a build and uploads the distribution to PyPI via OIDC trusted publishing — no API tokens involved.
 
 > [!NOTE]
 > The repository on GitHub is `Junbo-Zheng/OpenMiwear`, but the PyPI distribution and Python import/command names use the shorter **`miwear`** identifier (e.g. `import miwear`, `miwear_log …`). This is intentional — keep the project name **OpenMiwear** when referring to the repo, and the package name `miwear` when invoking the tools.
