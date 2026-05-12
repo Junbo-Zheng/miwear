@@ -133,8 +133,8 @@ def main() -> None:
         "--ext",
         type=str,
         nargs="+",
-        default=["bin"],
-        help="File extensions to extract (default: bin)",
+        default=["elf"],
+        help="File extensions to extract (default: elf)",
     )
     parser.add_argument(
         "-o",
