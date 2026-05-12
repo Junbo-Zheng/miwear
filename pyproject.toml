@@ -49,6 +49,7 @@ miwear_assert = "miwear.assert:main"
 miwear_serial = "miwear.serialtool:main"
 miwear_check = "miwear.check:main"
 miwear_loganalyzer = "miwear.loganalyzer:main"
+miwear_extract = "miwear.extract:main"
 
 [tool.setuptools]
 packages = { find = {} }
