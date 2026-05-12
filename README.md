@@ -115,7 +115,7 @@ miwear_uz --path ./logs     # *.zip
 Pull files with specific extensions out of a ZIP archive into an output directory, without performing a full extraction. If no ZIP is given, the current directory is scanned and you pick one interactively.
 
 ```bash
-# Auto-detect a ZIP in the current directory, extract *.bin (default)
+# Auto-detect a ZIP in the current directory, extract *.elf (default)
 miwear_extract
 
 # Explicit archive, multiple extensions, custom output directory
