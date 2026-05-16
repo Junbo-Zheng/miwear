@@ -23,76 +23,20 @@ import os
 from collections import defaultdict
 from typing import Dict, List
 
+import questionary
+
 try:
     from miwear import __version__
 except ImportError:
     __version__ = "0.0.1"
 
 
-def select_interactive(items: List[str]) -> int:
-    """Arrow-key inline selector. Returns chosen index."""
-    import sys
-    import tty
-    import termios
-    import shutil
-
-    cur = 0
-    total = len(items)
-    fd = sys.stdin.fileno()
-    old = termios.tcgetattr(fd)
-    out = sys.stdout
-    cols = shutil.get_terminal_size().columns
-
-    def display_lines() -> int:
-        """Calculate total display lines considering wrapping."""
-        count = 0
-        for item in items:
-            line_len = len(item) + 2  # ">" or " " + space + item
-            count += max(1, (line_len + cols - 1) // cols)
-        return count
-
-    def render(first: bool = False) -> None:
-        lines = display_lines()
-        if not first:
-            out.write(f"\033[{lines}A")
-        for i, item in enumerate(items):
-            if i == cur:
-                out.write(f"\033[1;32m> {item}\033[0m\033[K\n")
-            else:
-                out.write(f"  {item}\033[K\n")
-        out.flush()
-
-    def readkey() -> bytes:
-        ch = os.read(fd, 1)
-        if ch == b"\x1b":
-            ch += os.read(fd, 1)
-            ch += os.read(fd, 1)
-        return ch
-
-    try:
-        tty.setcbreak(fd)
-        out.write("\033[?25l")
-        out.flush()
-        render(first=True)
-        while True:
-            key = readkey()
-            if key in (b"\r", b"\n"):
-                break
-            elif key == b"\x1b[A" and cur > 0:
-                cur -= 1
-            elif key == b"\x1b[B" and cur < total - 1:
-                cur += 1
-            elif key == b"\x03":
-                raise KeyboardInterrupt
-            else:
-                continue
-            render()
-    finally:
-        termios.tcsetattr(fd, termios.TCSADRAIN, old)
-        out.write("\033[?25h")
-        out.flush()
-
-    return cur
+def select_interactive(items: List[str], message: str = "Select:") -> int:
+    """Arrow-key selector backed by questionary. Returns chosen index."""
+    answer = questionary.select(message, choices=items).ask()
+    if answer is None:
+        raise SystemExit(1)
+    return items.index(answer)
 
 
 def find_zip_file(path: str) -> str:
@@ -106,8 +50,7 @@ def find_zip_file(path: str) -> str:
         return zip_files[0]
 
     names = [os.path.basename(f) for f in zip_files]
-    print(f"Found {len(zip_files)} ZIP files (↑↓ to select, Enter to confirm):")
-    idx = select_interactive(names)
+    idx = select_interactive(names, f"Found {len(zip_files)} ZIP files:")
     print(f"Selected: {names[idx]}")
     return zip_files[idx]
 
@@ -195,11 +138,10 @@ def main() -> None:
                     selected.append(names[0])
                     continue
                 names.sort(key=conflict_sort_key)
-                print(
-                    f"\n'{basename}' exists in {len(names)} locations "
-                    f"(↑↓ to select, Enter to confirm):"
+                idx = select_interactive(
+                    names,
+                    f"'{basename}' exists in {len(names)} locations:",
                 )
-                idx = select_interactive(names)
                 print(f"Selected: {names[idx]}")
                 selected.append(names[idx])
 
