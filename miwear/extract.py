@@ -20,7 +20,8 @@ import glob
 import zipfile
 import argparse
 import os
-from typing import List
+from collections import defaultdict
+from typing import Dict, List
 
 try:
     from miwear import __version__
@@ -157,11 +158,16 @@ def main() -> None:
 
     try:
         with zipfile.ZipFile(args.zipfile, "r") as zf:
+            # Always include 'ota.zip' (strict basename match) regardless
+            # of --ext, so the OTA package is extracted alongside elf/bin/etc.
             matched = [
                 name
                 for name in zf.namelist()
                 if not name.endswith("/")
-                and name.rsplit(".", 1)[-1].lower() in extensions
+                and (
+                    name.rsplit(".", 1)[-1].lower() in extensions
+                    or os.path.basename(name) == "ota.zip"
+                )
             ]
 
             if not matched:
@@ -172,20 +178,45 @@ def main() -> None:
                 )
                 return
 
+            # Group by basename to detect same-name conflicts across folders.
+            groups: Dict[str, List[str]] = defaultdict(list)
+            for name in matched:
+                groups[os.path.basename(name)].append(name)
+
+            # Sort key: place the "base" parent dir first (no '_' suffix
+            # variant like 'audio' before 'audio_test'/'audio_performance_test').
+            def conflict_sort_key(path: str) -> tuple:
+                parent = os.path.basename(os.path.dirname(path))
+                return (parent.count("_"), len(parent), parent)
+
+            selected: List[str] = []
+            for basename, names in groups.items():
+                if len(names) == 1:
+                    selected.append(names[0])
+                    continue
+                names.sort(key=conflict_sort_key)
+                print(
+                    f"\n'{basename}' exists in {len(names)} locations "
+                    f"(↑↓ to select, Enter to confirm):"
+                )
+                idx = select_interactive(names)
+                print(f"Selected: {names[idx]}")
+                selected.append(names[idx])
+
             os.makedirs(args.output, exist_ok=True)
 
             print(
-                f"Extracting {len(matched)} file(s) with extension(s) "
+                f"\nExtracting {len(selected)} file(s) with extension(s) "
                 f"{', '.join('.' + e for e in extensions)} "
                 f"to '{os.path.abspath(args.output)}':"
             )
 
-            for name in matched:
+            for name in selected:
                 basename = os.path.basename(name)
                 target = os.path.join(args.output, basename)
                 with zf.open(name) as src, open(target, "wb") as dst:
                     dst.write(src.read())
-                print(f"  {basename}")
+                print(f"  {basename}  (from {name})")
 
             print("Done!")
 
